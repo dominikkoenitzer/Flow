@@ -218,6 +218,7 @@ private:
     std::atomic<bool> shouldStopPlayback;    ///< Stop signal for playback
     std::thread playbackThread;              ///< Playback worker thread
     std::atomic<int> loopCount;              ///< Loop count (-1 = infinite)
+    std::atomic<int> currentLoopIteration;   ///< Current loop iteration (for display)
 
     // ===== Humanization =====
     HumanizationEngine humanizer;            ///< Timing variance generator
@@ -349,6 +350,12 @@ public:
      * @return true if playing, false otherwise
      */
     bool IsPlaybackActive() const { return isPlaying.load(); }
+    
+    /**
+     * @brief Get current playback loop iteration
+     * @return Current loop number (starts at 1)
+     */
+    int GetCurrentLoop() const { return currentLoopIteration.load(); }
 
     // ===== Humanization Control =====
     
