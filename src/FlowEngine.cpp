@@ -91,7 +91,7 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
 FlowEngine::FlowEngine() 
     : isRecording(false), isClicking(false), isPlaying(false), 
       shouldStopPlayback(false), clickInterval(DEFAULT_CLICK_INTERVAL), loopCount(1),
-      recordingStartTime(0), humanizationEnabled(true) {
+      currentLoopIteration(0), recordingStartTime(0), humanizationEnabled(true) {
     instance = this;
 }
 
@@ -209,6 +209,13 @@ void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
 }
 
 void FlowEngine::OnKeyboardEvent(WPARAM wParam, KBDLLHOOKSTRUCT* keyStruct) {
+    // Filter out hotkey keys to prevent recording control keys
+    // F6 (auto-clicker toggle), F8 (record toggle), P (with Ctrl+Shift+Alt for playback)
+    DWORD vk = keyStruct->vkCode;
+    if (vk == VK_F6 || vk == VK_F8 || vk == 'P') {
+        return; // Don't record control hotkeys
+    }
+
     InputEvent event;
     event.virtualKeyCode = keyStruct->vkCode;
     event.scanCode = keyStruct->scanCode;
@@ -341,8 +348,10 @@ void FlowEngine::PlaybackThreadFunction() {
 
     int currentLoop = 0;
     int maxLoops = loopCount.load();
+    currentLoopIteration.store(0);
 
     while ((maxLoops == -1 || currentLoop < maxLoops) && !shouldStopPlayback.load()) {
+        currentLoopIteration.store(currentLoop + 1);
         HighResTimer timer;
         DWORD lastEventTime = 0;
 
