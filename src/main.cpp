@@ -72,6 +72,7 @@ enum ControlID {
     CHK_CONTINUOUS = 305,
     CHK_HUMANIZATION = 401,
     SLIDER_HUMANIZATION = 402,
+    LABEL_HUMANIZATION_VALUE = 403,
     BTN_SAVE_MACRO = 501,
     BTN_LOAD_MACRO = 502,
     STATUS_TEXT = 601,
@@ -125,7 +126,7 @@ struct HotkeyConfig {
 std::map<int, HotkeyConfig> g_hotkeys = {
     {HOTKEY_TOGGLE_CLICKER, {HOTKEY_TOGGLE_CLICKER, 0, VK_F6, "Toggle Clicker", "F6"}},
     {HOTKEY_TOGGLE_RECORD, {HOTKEY_TOGGLE_RECORD, 0, VK_F8, "Toggle Recording", "F8"}},
-    {HOTKEY_PLAYBACK, {HOTKEY_PLAYBACK, 0, VK_F12, "Play/Stop", "F12"}}
+    {HOTKEY_PLAYBACK, {HOTKEY_PLAYBACK, MOD_CONTROL | MOD_SHIFT | MOD_ALT, 'P', "Play/Stop", "Ctrl+Shift+Alt+P"}}
 };
 
 // ============================================================================
@@ -183,6 +184,14 @@ void RegisterHotkeys(HWND hwnd) {
         UnregisterHotKey(hwnd, pair.first);
         RegisterHotKey(hwnd, pair.first, pair.second.modifiers, pair.second.vk);
     }
+}
+
+void UpdateButtonLabels(HWND hwnd) {
+    std::string recordBtnText = "RECORD (" + g_hotkeys[HOTKEY_TOGGLE_RECORD].displayName + ")";
+    SetWindowTextA(GetDlgItem(hwnd, BTN_START_RECORD), recordBtnText.c_str());
+    
+    std::string playBtnText = "PLAY (" + g_hotkeys[HOTKEY_PLAYBACK].displayName + ")";
+    SetWindowTextA(GetDlgItem(hwnd, BTN_PLAY_ONCE), playBtnText.c_str());
 }
 
 HFONT CreateModernFont(int size, int weight = FW_NORMAL) {
@@ -344,7 +353,8 @@ void UpdateStatusText() {
         ss << "[RECORDING " << g_app.engine->GetEventCount() << " events] ";
     }
     if (g_app.engine->IsPlaybackActive()) {
-        ss << "[PLAYING @ " << g_app.playbackSpeed << "x] ";
+        int loopNum = g_app.engine->GetCurrentLoop();
+        ss << "[PLAYING Loop #" << loopNum << "] ";
     }
     if (!g_app.engine->IsClickerActive() && !g_app.engine->IsRecordingActive() && !g_app.engine->IsPlaybackActive()) {
         ss << "Idle";
@@ -388,12 +398,40 @@ void CreateMenuBar(HWND hwnd) {
     AppendMenu(hPlaybackMenu, MF_STRING, MENU_SPEED_HALF, "0.5x Speed");
     AppendMenu(hPlaybackMenu, MF_STRING, MENU_SPEED_1X, "1x Speed");
     AppendMenu(hPlaybackMenu, MF_STRING, MENU_SPEED_2X, "2x Speed");
-    AppendMenu(hPlaybackMenu, MF_SEPARATOR, 0, NULL);
-    AppendMenu(hPlaybackMenu, MF_STRING, MENU_SPEED_CUSTOM, "Custom Speed...");
     AppendMenu(g_app.hMenu, MF_POPUP, (UINT_PTR)hPlaybackMenu, "Playback");
     
     // Options Menu
     HMENU hOptionsMenu = CreatePopupMenu();
+    
+    // Hotkeys submenu
+    HMENU hHotkeyMenu = CreatePopupMenu();
+    
+    HMENU hHotkeyClicker = CreatePopupMenu();
+    AppendMenu(hHotkeyClicker, MF_STRING, 5001, "F5");
+    AppendMenu(hHotkeyClicker, MF_STRING, 5002, "F6");
+    AppendMenu(hHotkeyClicker, MF_STRING, 5003, "F7");
+    AppendMenu(hHotkeyClicker, MF_STRING, 5004, "Pause");
+    AppendMenu(hHotkeyMenu, MF_POPUP, (UINT_PTR)hHotkeyClicker, "Auto-Clicker");
+    
+    HMENU hHotkeyRecord = CreatePopupMenu();
+    AppendMenu(hHotkeyRecord, MF_STRING, 5011, "F7");
+    AppendMenu(hHotkeyRecord, MF_STRING, 5012, "F8");
+    AppendMenu(hHotkeyRecord, MF_STRING, 5013, "F9");
+    AppendMenu(hHotkeyRecord, MF_STRING, 5014, "Print Screen");
+    AppendMenu(hHotkeyMenu, MF_POPUP, (UINT_PTR)hHotkeyRecord, "Toggle Recording");
+    
+    HMENU hHotkeyPlayback = CreatePopupMenu();
+    AppendMenu(hHotkeyPlayback, MF_STRING, 5031, "F8");
+    AppendMenu(hHotkeyPlayback, MF_STRING, 5032, "F11");
+    AppendMenu(hHotkeyPlayback, MF_STRING, 5033, "F12");
+    AppendMenu(hHotkeyPlayback, MF_STRING, 5034, "Pause");
+    AppendMenu(hHotkeyPlayback, MF_STRING, 5035, "Scroll Lock");
+    AppendMenu(hHotkeyPlayback, MF_STRING, 5036, "Print Screen");
+    AppendMenu(hHotkeyPlayback, MF_STRING, 5037, "Ctrl+Shift+Alt+P");
+    AppendMenu(hHotkeyMenu, MF_POPUP, (UINT_PTR)hHotkeyPlayback, "Playback");
+    
+    AppendMenu(hOptionsMenu, MF_POPUP, (UINT_PTR)hHotkeyMenu, "Hotkeys");
+    AppendMenu(hOptionsMenu, MF_SEPARATOR, 0, NULL);
     AppendMenu(hOptionsMenu, MF_STRING, MENU_ALWAYS_ON_TOP, "Always on Top");
     AppendMenu(g_app.hMenu, MF_POPUP, (UINT_PTR)hOptionsMenu, "Options");
     
@@ -411,13 +449,13 @@ void CreateMenuBar(HWND hwnd) {
 // ============================================================================
 
 void CreateControls(HWND hwnd) {
-    int margin = 30;
-    int groupY = 70;
-    int groupSpacing = 180;
-    int groupWidth = 400;
-    int btnHeight = 50;
-    int btnWidth = 195;
-    int labelHeight = 30;
+    int margin = 15;
+    int groupY = 50;
+    int groupSpacing = 140;
+    int groupWidth = 320;
+    int btnHeight = 32;
+    int btnWidth = 155;
+    int labelHeight = 22;
     
     // === AUTO-CLICKER SECTION ===
     int y = groupY;
@@ -443,7 +481,8 @@ void CreateControls(HWND hwnd) {
     SendMessage(labelRecorder, WM_SETFONT, (WPARAM)g_app.fontTitle, TRUE);
     y += labelHeight + 15;
     
-    CreateModernButton(hwnd, "RECORD (F8)", margin, y, btnWidth, btnHeight, BTN_START_RECORD);
+    std::string recordBtnText = "RECORD (" + g_hotkeys[HOTKEY_TOGGLE_RECORD].displayName + ")";
+    CreateModernButton(hwnd, recordBtnText.c_str(), margin, y, btnWidth, btnHeight, BTN_START_RECORD);
     CreateModernButton(hwnd, "CLEAR", margin + btnWidth + 10, y, btnWidth - 60, btnHeight, BTN_CLEAR_RECORD);
     
     // === PLAYBACK SECTION ===
@@ -453,18 +492,9 @@ void CreateControls(HWND hwnd) {
     SendMessage(labelPlayback, WM_SETFONT, (WPARAM)g_app.fontTitle, TRUE);
     y += labelHeight + 15;
     
-    CreateModernButton(hwnd, "PLAY ONCE", margin, y, btnWidth - 30, btnHeight, BTN_PLAY_ONCE);
-    CreateModernButton(hwnd, "LOOP", margin + btnWidth - 25, y, 100, btnHeight, BTN_PLAY_LOOP);
-    CreateModernButton(hwnd, "STOP", margin + btnWidth + 85, y, 100, btnHeight, BTN_STOP_PLAYBACK);
-    y += btnHeight + 15;
-    
-    // Loop count controls
-    CreateModernCheckbox(hwnd, "Continuous Loop", margin, y, 180, 32, CHK_CONTINUOUS, g_app.continuousPlayback);
-    CreateWindowEx(0, "STATIC", "Loop Count:", WS_CHILD | WS_VISIBLE | SS_LEFT,
-        margin + 190, y + 5, 90, 22, hwnd, NULL, GetModuleHandle(NULL), NULL);
-    char loopBuf[16];
-    sprintf(loopBuf, "%d", g_app.loopCount);
-    CreateModernEdit(hwnd, loopBuf, margin + 285, y + 3, 60, 28, EDIT_LOOP_COUNT);
+    std::string playBtnText = "PLAY (" + g_hotkeys[HOTKEY_PLAYBACK].displayName + ")";
+    CreateModernButton(hwnd, playBtnText.c_str(), margin, y, btnWidth, btnHeight, BTN_PLAY_ONCE);
+    CreateModernButton(hwnd, "STOP", margin + btnWidth + 10, y, btnWidth - 60, btnHeight, BTN_STOP_PLAYBACK);
     
     // === HUMANIZATION (RIGHT COLUMN) ===
     y = groupY;
@@ -478,6 +508,10 @@ void CreateControls(HWND hwnd) {
     y += 45;
     CreateWindowEx(0, "STATIC", "Randomness Level:", WS_CHILD | WS_VISIBLE | SS_LEFT,
         col2X, y, 140, 22, hwnd, NULL, GetModuleHandle(NULL), NULL);
+    char humanValBuf[32];
+    sprintf(humanValBuf, "%.1f ms", FlowConfig::HUMANIZATION_STDDEV);
+    CreateWindowEx(0, "STATIC", humanValBuf, WS_CHILD | WS_VISIBLE | SS_LEFT,
+        col2X + 145, y, 80, 22, hwnd, (HMENU)(UINT_PTR)LABEL_HUMANIZATION_VALUE, GetModuleHandle(NULL), NULL);
     y += 30;
     CreateModernSlider(hwnd, col2X, y, groupWidth - 10, 30, SLIDER_HUMANIZATION, 0, 50, (int)(FlowConfig::HUMANIZATION_STDDEV * 10));
     
@@ -494,7 +528,7 @@ void CreateControls(HWND hwnd) {
     // === STATUS BAR ===
     HWND status = CreateWindowEx(0, "STATIC", "",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        margin, 600, 820, 30, hwnd, (HMENU)STATUS_TEXT, GetModuleHandle(NULL), NULL);
+        margin, 450, 670, 30, hwnd, (HMENU)STATUS_TEXT, GetModuleHandle(NULL), NULL);
     SendMessage(status, WM_SETFONT, (WPARAM)g_app.fontSmall, TRUE);
     
     // Set fonts for static labels
@@ -545,29 +579,16 @@ void HandleCommand(HWND hwnd, WPARAM wParam) {
             break;
         
         case BTN_PLAY_ONCE:
-            g_app.engine->StartPlayback(1);
+            // Stop recording before starting playback
+            if (g_app.engine->IsRecordingActive()) {
+                g_app.engine->StopRecording();
+            }
+            // Always start continuous playback (loops until stopped)
+            g_app.engine->StartPlayback(-1);
             break;
-        
-        case BTN_PLAY_LOOP: {
-            char buf[16];
-            GetWindowTextA(GetDlgItem(hwnd, EDIT_LOOP_COUNT), buf, sizeof(buf));
-            int loops = atoi(buf);
-            if (loops < 1) loops = 1;
-            if (loops > 10000) loops = 10000;
-            g_app.loopCount = loops;
-            
-            bool continuous = SendMessage(GetDlgItem(hwnd, CHK_CONTINUOUS), BM_GETCHECK, 0, 0) == BST_CHECKED;
-            g_app.engine->StartPlayback(continuous ? -1 : loops);
-            break;
-        }
         
         case BTN_STOP_PLAYBACK:
             g_app.engine->StopPlayback();
-            break;
-        
-        case CHK_CONTINUOUS:
-            g_app.continuousPlayback = SendMessage(GetDlgItem(hwnd, CHK_CONTINUOUS), BM_GETCHECK, 0, 0) == BST_CHECKED;
-            EnableWindow(GetDlgItem(hwnd, EDIT_LOOP_COUNT), !g_app.continuousPlayback);
             break;
         
         case CHK_HUMANIZATION: {
@@ -629,15 +650,6 @@ void HandleCommand(HWND hwnd, WPARAM wParam) {
         case MENU_SPEED_1X: g_app.playbackSpeed = 1.0f; UpdateMenuChecks(); break;
         case MENU_SPEED_2X: g_app.playbackSpeed = 2.0f; UpdateMenuChecks(); break;
         
-        case MENU_SPEED_CUSTOM: {
-            char buf[64];
-            sprintf(buf, "%.2f", g_app.playbackSpeed);
-            if (MessageBoxA(hwnd, "Enter custom playback speed (0.1 - 1000.0):", "Custom Speed", MB_OKCANCEL) == IDOK) {
-                // TODO: Show input dialog
-            }
-            break;
-        }
-        
         // Options
         case MENU_ALWAYS_ON_TOP:
             g_app.alwaysOnTop = !g_app.alwaysOnTop;
@@ -654,15 +666,23 @@ void HandleCommand(HWND hwnd, WPARAM wParam) {
         
         case MENU_ABOUT:
             MessageBoxA(hwnd,
-                "FLOW v2.0.0\n"
-                "Flexible Low-latency Operations Workflow\n\n"
-                "Advanced input automation engine with:\n"
-                "- High-speed auto-clicker\n"
-                "- Macro recording & playback\n"
-                "- Customizable hotkeys\n"
-                "- Variable playback speed\n"
-                "- Humanization\n\n"
-                "Copyright (c) 2026 FLOW Project",
+                "FLOW - Input Automation Engine\n\n"
+                "QUICK START:\n"
+                "1. Auto-Clicker: Set interval → START CLICKER (F6 to toggle)\n"
+                "2. Record Macro: Press F8 → Perform actions → Press F8 to stop\n"
+                "3. Playback: Press Ctrl+Shift+Alt+P or click PLAY\n\n"
+                "HOTKEYS (customizable in Options → Hotkeys):\n"
+                "• F6 - Toggle auto-clicker\n"
+                "• F8 - Toggle macro recording\n"
+                "• Ctrl+Shift+Alt+P - Play/Stop macro\n\n"
+                "FEATURES:\n"
+                "- High-speed clicking (1-10000ms intervals)\n"
+                "- Precise macro recording & playback\n"
+                "- Loop control (single, multiple, continuous)\n"
+                "- Playback speed adjustment (0.5x - 2x)\n"
+                "- Optional humanization for natural timing\n\n"
+                "⚠️ Run as Administrator for full functionality\n\n"
+                "Copyright © 2026 FLOW Project",
                 "About FLOW", MB_OK | MB_ICONINFORMATION);
             break;
         
@@ -688,6 +708,7 @@ void HandleCommand(HWND hwnd, WPARAM wParam) {
             g_hotkeys[HOTKEY_TOGGLE_RECORD].vk = vk;
             g_hotkeys[HOTKEY_TOGGLE_RECORD].displayName = VKToString(vk);
             RegisterHotkeys(hwnd);
+            UpdateButtonLabels(hwnd);
             break;
         }
         
@@ -712,6 +733,7 @@ void HandleCommand(HWND hwnd, WPARAM wParam) {
                 g_hotkeys[HOTKEY_PLAYBACK].displayName = VKToString(vk);
             }
             RegisterHotkeys(hwnd);
+            UpdateButtonLabels(hwnd);
             break;
         }
     }
@@ -730,6 +752,9 @@ void HandleHScroll(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     } else if (id == SLIDER_HUMANIZATION) {
         double stddev = pos / 10.0;
         g_app.engine->ConfigureHumanization(FlowConfig::HUMANIZATION_MEAN, stddev);
+        char buf[32];
+        sprintf(buf, "%.1f ms", stddev);
+        SetWindowTextA(GetDlgItem(hwnd, LABEL_HUMANIZATION_VALUE), buf);
     }
 }
 
@@ -817,7 +842,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (g_app.engine->IsPlaybackActive()) {
                         g_app.engine->StopPlayback();
                     } else {
-                        g_app.engine->StartPlayback(g_app.continuousPlayback ? -1 : g_app.loopCount);
+                        // Stop recording before starting playback
+                        if (g_app.engine->IsRecordingActive()) {
+                            g_app.engine->StopRecording();
+                        }
+                        // Hotkey always starts continuous playback (loops forever until stopped)
+                        g_app.engine->StartPlayback(-1);
                     }
                     break;
             }
@@ -964,9 +994,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
     
-    int width = 920;
-    int height = 680;
-    g_app.hwnd = CreateWindowEx(0, "FlowMainWindow", "FLOW v2.0 - Input Automation Engine",
+    int width = 700;
+    int height = 500;
+    g_app.hwnd = CreateWindowEx(0, "FlowMainWindow", "FLOW - Input Automation Engine",
         WS_OVERLAPPEDWINDOW,
         (GetSystemMetrics(SM_CXSCREEN) - width) / 2,
         (GetSystemMetrics(SM_CYSCREEN) - height) / 2,
