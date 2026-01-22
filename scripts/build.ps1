@@ -50,7 +50,7 @@ Write-Host "  ✓ Build directory ready" -ForegroundColor Green
 Write-Host "[3/4] Compiling FLOW..." -ForegroundColor Yellow
 
 $SourceFiles = @(
-    (Join-Path $SrcDir "main_gui_v2.cpp"),
+    (Join-Path $SrcDir "main.cpp"),
     (Join-Path $SrcDir "FlowEngine.cpp")
 )
 
