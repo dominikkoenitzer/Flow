@@ -8,6 +8,7 @@
  */
 
 #include "FlowEngine.h"
+#include "Protection.h"
 #include <windows.h>
 #include <commctrl.h>
 #include <string>
@@ -964,6 +965,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 // ============================================================================
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Anti-debugging protection
+    flow::protection::EnforceProtection();
+    
     // Enable DPI Awareness for crisp rendering on high-DPI displays
     SetProcessDPIAware();
     
