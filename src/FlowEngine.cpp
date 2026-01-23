@@ -324,12 +324,22 @@ void FlowEngine::ClickerThreadFunction() {
 // ============================================================================
 
 void FlowEngine::StartPlayback(int loops) {
-    if (isPlaying.load() || recordedEvents.empty()) return;
+    if (isPlaying.load()) {
+        StopPlayback(); // Ensure any existing playback is stopped
+        Sleep(50);
+    }
+    
+    if (recordedEvents.empty()) return;
 
     loopCount.store(loops);
     shouldStopPlayback.store(false);
     isPlaying.store(true);
 
+    // Ensure old thread is cleaned up before starting new one
+    if (playbackThread.joinable()) {
+        playbackThread.join();
+    }
+    
     playbackThread = std::thread(&FlowEngine::PlaybackThreadFunction, this);
 }
 
@@ -349,14 +359,25 @@ void FlowEngine::PlaybackThreadFunction() {
     int currentLoop = 0;
     int maxLoops = loopCount.load();
     currentLoopIteration.store(0);
+    
+    // Create a local copy of events to avoid race conditions
+    std::vector<InputEvent> eventsCopy;
+    {
+        std::lock_guard<std::mutex> lock(recordMutex);
+        if (recordedEvents.empty()) {
+            isPlaying.store(false);
+            return;
+        }
+        eventsCopy = recordedEvents;
+    }
 
     while ((maxLoops == -1 || currentLoop < maxLoops) && !shouldStopPlayback.load()) {
         currentLoopIteration.store(currentLoop + 1);
         HighResTimer timer;
         DWORD lastEventTime = 0;
 
-        for (size_t i = 0; i < recordedEvents.size() && !shouldStopPlayback.load(); ++i) {
-            const InputEvent& event = recordedEvents[i];
+        for (size_t i = 0; i < eventsCopy.size() && !shouldStopPlayback.load(); ++i) {
+            const InputEvent& event = eventsCopy[i];
 
             DWORD timeDiff = event.timestamp - lastEventTime;
             lastEventTime = event.timestamp;
@@ -377,13 +398,29 @@ void FlowEngine::PlaybackThreadFunction() {
             INPUT input = {0};
 
             switch (event.type) {
-                case InputEvent::Type::MOUSE_MOVE:
+                case InputEvent::Type::MOUSE_MOVE: {
                     input.type = INPUT_MOUSE;
-                    input.mi.dx = (event.screenCoords.x * 65536) / GetSystemMetrics(SM_CXSCREEN);
-                    input.mi.dy = (event.screenCoords.y * 65536) / GetSystemMetrics(SM_CYSCREEN);
-                    input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+                    // Use virtual screen coordinates for multi-monitor support
+                    int vX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+                    int vY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+                    int vW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                    int vH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                    
+                    // Convert screen coordinates to normalized 0-65535 range
+                    // Add 0.5 for rounding, ensure width/height are > 0
+                    double normX = (vW > 1) ? (double)(event.screenCoords.x - vX) / (vW - 1) : 0.0;
+                    double normY = (vH > 1) ? (double)(event.screenCoords.y - vY) / (vH - 1) : 0.0;
+                    
+                    // Clamp to valid range and scale to 0-65535
+                    normX = (normX < 0.0) ? 0.0 : (normX > 1.0) ? 1.0 : normX;
+                    normY = (normY < 0.0) ? 0.0 : (normY > 1.0) ? 1.0 : normY;
+                    
+                    input.mi.dx = (LONG)(normX * 65535.0 + 0.5);
+                    input.mi.dy = (LONG)(normY * 65535.0 + 0.5);
+                    input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
                     SendInput(1, &input, sizeof(INPUT));
                     break;
+                }
 
                 case InputEvent::Type::MOUSE_LEFT_DOWN:
                     input.type = INPUT_MOUSE;
@@ -446,6 +483,7 @@ void FlowEngine::PlaybackThreadFunction() {
     }
 
     isPlaying.store(false);
+    currentLoopIteration.store(0);
 }
 
 // ============================================================================

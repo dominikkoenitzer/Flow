@@ -325,7 +325,8 @@ public:
      * @brief Clear all recorded events
      */
     void ClearRecording();
-    
+    bool HasRecordedEvents() const { return !recordedEvents.empty(); }
+
     /**
      * @brief Get number of recorded events
      * @return Event count
