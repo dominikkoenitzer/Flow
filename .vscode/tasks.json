@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build FLOW (MinGW)",
+            "label": "Build FLOW",
             "type": "shell",
             "command": "g++",
             "args": [
@@ -37,132 +37,15 @@
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Build FLOW GUI",
-            "type": "shell",
-            "command": "g++",
-            "args": [
-                "-std=c++17",
-                "-O3",
-                "-Wall",
-                "-Wextra",
-                "-mwindows",
-                "-I${workspaceFolder}/include",
-                "-o",
-                "${workspaceFolder}/build/FLOW_GUI.exe",
-                "${workspaceFolder}/src/main_gui.cpp",
-                "${workspaceFolder}/src/FlowEngine.cpp",
-                "-luser32",
-                "-lgdi32",
-                "-lshcore",
-                "-lcomctl32",
-                "-static-libgcc",
-                "-static-libstdc++"
-            ],
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": true,
-                "clear": false
-            },
-            "problemMatcher": "$gcc"
-        },
-        {
-            "label": "Build FLOW GUI v2",
-            "type": "shell",
-            "command": "g++",
-            "args": [
-                "-std=c++17",
-                "-O3",
-                "-Wall",
-                "-Wextra",
-                "-mwindows",
-                "-I${workspaceFolder}/include",
-                "-o",
-                "${workspaceFolder}/build/FLOW_GUI_v2.exe",
-                "${workspaceFolder}/src/main_gui_v2.cpp",
-                "${workspaceFolder}/src/FlowEngine.cpp",
-                "-luser32",
-                "-lgdi32",
-                "-lshcore",
-                "-lcomctl32",
-                "-static-libgcc",
-                "-static-libstdc++"
-            ],
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": true,
-                "clear": false
-            },
-            "problemMatcher": "$gcc"
-        },
-        {
-            "label": "Build FLOW (Debug)",
-            "type": "shell",
-            "command": "g++",
-            "args": [
-                "-std=c++17",
-                "-O0",
-                "-Wall",
-                "-Wextra",
-                "-I${workspaceFolder}/include",
-                "-o",
-                "${workspaceFolder}/build/FLOW_debug.exe",
-                "${workspaceFolder}/src/main.cpp",
-                "${workspaceFolder}/src/main.cpp",
-                "${workspaceFolder}/FlowEngine.cpp",
-                "-luser32",
-                "-lgdi32",
-                "-static-libgcc",
-                "-static-libstdc++"
-            ],
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": true,
-                "clear": false
-            },
-            "problemMatcher": "$gcc"
-        },
-        {
-            "label": "Clean Build",
-            "type": "shell",
-            "commaExecutionPolicy",
-                "Bypass",
-                "-File",
-                "${workspaceFolder}/scripts/clean.ps1
-                "-ErrorAction",
-                "SilentlyContinue"
-            ],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
             "label": "Build and Run FLOW",
             "type": "shell",
-            "dependsOn": "Build FLOW (MinGW)",
+            "dependsOn": "Build FLOW",
             "command": "powershell",
             "args": [
                 "-Command",
                 "Start-Process",
                 "-FilePath",
-                "'${workspaceFolder}/FLOW.exe'",
-                "-Verb",build/
-                "RunAs"
+                "'${workspaceFolder}/build/FLOW.exe'"
             ],
             "presentation": {
                 "echo": true,
