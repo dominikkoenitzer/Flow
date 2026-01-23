@@ -24,7 +24,8 @@ using namespace flow;
 constexpr int BUTTON_SIZE = 80;
 constexpr int BUTTON_SPACING = 12;
 constexpr int MARGIN = 20;
-constexpr int TOOLBAR_HEIGHT = BUTTON_SIZE + MARGIN * 2;
+constexpr int LABEL_HEIGHT = 20;
+constexpr int TOOLBAR_HEIGHT = BUTTON_SIZE + LABEL_HEIGHT + MARGIN * 2;
 constexpr int STATUS_HEIGHT = 100;
 constexpr int WINDOW_FULL_HEIGHT = TOOLBAR_HEIGHT + STATUS_HEIGHT;
 constexpr int CORNER_RADIUS = 8;
@@ -84,6 +85,8 @@ enum ControlID {
     IDC_HOTKEY_STOP = 404,
     IDC_HOTKEY_OK = 405,
     IDC_HOTKEY_CANCEL = 406,
+    
+    TIMER_STATUS_CHECK = 500,
 };
 
 // ============================================================================
@@ -105,7 +108,7 @@ struct AppState {
     double humanizationStdDev = 2.0;
     
     // Hotkey settings
-    UINT hotkeyRecord = 'F';
+    UINT hotkeyRecord = VK_F8;
     UINT hotkeyPlayback = 'P';
     UINT hotkeyClicker = VK_F6;
     UINT hotkeyStop = VK_PAUSE;
@@ -113,7 +116,7 @@ struct AppState {
 } g_app;
 
 // Temporary hotkey storage for customization dialog
-UINT g_tempHotkeyRecord = 'F';
+UINT g_tempHotkeyRecord = VK_F8;
 UINT g_tempHotkeyPlayback = 'P';
 UINT g_tempHotkeyClicker = VK_F6;
 UINT g_tempHotkeyStop = VK_PAUSE;
@@ -748,15 +751,17 @@ void ShowLoopCountDialog(HWND hwnd) {
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     
     // Modern title with icon
-    HWND hTitle = CreateWindowExW(0, L"STATIC", L"🔁 Playback Loop Settings",
+    HWND hTitle = CreateWindowExW(0, L"STATIC", L"🔁 Loop Settings",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         35, 30, 530, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hTitle, WM_SETFONT, (WPARAM)hTitleFont, TRUE);
     
-    // Clean description
-    HWND hLabel = CreateWindowExW(0, L"STATIC", L"Number of playback repetitions (1-999 loops):",
+    // Clean description with better formatting
+    HWND hLabel = CreateWindowExW(0, L"STATIC", 
+        L"How many times should the recording play?\n"
+        L"Enter a value between 1 and 999, or enable continuous mode.",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 90, 530, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
+        35, 85, 530, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
     
     // Modern input field with rounded appearance
@@ -903,10 +908,12 @@ void ShowClickIntervalDialog(HWND hwnd) {
         35, 30, 550, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hTitle, WM_SETFONT, (WPARAM)hTitleFont, TRUE);
     
-    // Clean description
-    HWND hLabel = CreateWindowExW(0, L"STATIC", L"Click interval in milliseconds (1-10000 ms):",
+    // Clear description with better formatting
+    HWND hLabel = CreateWindowExW(0, L"STATIC", 
+        L"Set the time delay between each automatic click.\n"
+        L"Enter a value between 1 and 10000 milliseconds.",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 90, 550, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
+        35, 85, 550, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
     
     // Professional input field
@@ -1110,15 +1117,25 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     
     // Modern title
-    HWND hTitle = CreateWindowExW(0, L"STATIC", L"⌨ Keyboard Shortcuts",
+    HWND hTitle = CreateWindowExW(0, L"STATIC", L"⌨ Customize Hotkeys",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         35, 30, 610, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hTitle, WM_SETFONT, (WPARAM)hTitleFont, TRUE);
     
-    // Recording hotkey - modern card style
-    HWND hLabel1 = CreateWindowExW(0, L"STATIC", L"● Recording:",
+    // Subtitle explaining purpose
+    HWND hSubtitle = CreateWindowExW(0, L"STATIC", 
+        L"Assign keyboard shortcuts for quick access to FLOW functions.",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 95, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
+        35, 72, 610, 24, hDlg, NULL, GetModuleHandle(NULL), NULL);
+    HFONT hSubFont = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    SendMessage(hSubtitle, WM_SETFONT, (WPARAM)hSubFont, TRUE);
+    
+    // Recording hotkey - modern card style
+    HWND hLabel1 = CreateWindowExW(0, L"STATIC", L"● Start/Stop Recording",
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        35, 115, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hLabel1, WM_SETFONT, (WPARAM)hFont, TRUE);
     
     const char* keyName1 = GetKeyName(g_app.hotkeyRecord, false);
@@ -1126,14 +1143,14 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     MultiByteToWideChar(CP_ACP, 0, keyName1, -1, wKeyName1, 64);
     g_hHotkeyRecordEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wKeyName1,
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_CENTER,
-        220, 90, 425, 48, hDlg, (HMENU)IDC_HOTKEY_RECORD, GetModuleHandle(NULL), NULL);
+        220, 110, 425, 48, hDlg, (HMENU)IDC_HOTKEY_RECORD, GetModuleHandle(NULL), NULL);
     SendMessage(g_hHotkeyRecordEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
     SetWindowSubclass(g_hHotkeyRecordEdit, HotkeyEditProc, 0, 0);
     
     // Playback hotkey
-    HWND hLabel2 = CreateWindowExW(0, L"STATIC", L"▶ Playback:",
+    HWND hLabel2 = CreateWindowExW(0, L"STATIC", L"▶ Start/Stop Playback",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 165, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
+        35, 185, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hLabel2, WM_SETFONT, (WPARAM)hFont, TRUE);
     
     const char* keyName2 = GetKeyName(g_app.hotkeyPlayback, true);
@@ -1141,14 +1158,14 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     MultiByteToWideChar(CP_ACP, 0, keyName2, -1, wKeyName2, 64);
     g_hHotkeyPlaybackEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wKeyName2,
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_CENTER,
-        220, 160, 425, 48, hDlg, (HMENU)IDC_HOTKEY_PLAYBACK, GetModuleHandle(NULL), NULL);
+        220, 180, 425, 48, hDlg, (HMENU)IDC_HOTKEY_PLAYBACK, GetModuleHandle(NULL), NULL);
     SendMessage(g_hHotkeyPlaybackEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
     SetWindowSubclass(g_hHotkeyPlaybackEdit, HotkeyEditProc, 0, 0);
     
     // Auto-Clicker hotkey
-    HWND hLabel3 = CreateWindowExW(0, L"STATIC", L"⚡ Auto-Clicker:",
+    HWND hLabel3 = CreateWindowExW(0, L"STATIC", L"⚡ Toggle Auto-Clicker",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 235, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
+        35, 255, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hLabel3, WM_SETFONT, (WPARAM)hFont, TRUE);
     
     const char* keyName3 = GetKeyName(g_app.hotkeyClicker, false);
@@ -1156,14 +1173,14 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     MultiByteToWideChar(CP_ACP, 0, keyName3, -1, wKeyName3, 64);
     g_hHotkeyClickerEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wKeyName3,
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_CENTER,
-        220, 230, 425, 48, hDlg, (HMENU)IDC_HOTKEY_CLICKER, GetModuleHandle(NULL), NULL);
+        220, 250, 425, 48, hDlg, (HMENU)IDC_HOTKEY_CLICKER, GetModuleHandle(NULL), NULL);
     SendMessage(g_hHotkeyClickerEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
     SetWindowSubclass(g_hHotkeyClickerEdit, HotkeyEditProc, 0, 0);
     
     // Stop All hotkey
-    HWND hLabel4 = CreateWindowExW(0, L"STATIC", L"■ Stop All:",
+    HWND hLabel4 = CreateWindowExW(0, L"STATIC", L"■ Stop All Activities",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 305, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
+        35, 325, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hLabel4, WM_SETFONT, (WPARAM)hFont, TRUE);
     
     const char* keyName4 = GetKeyName(g_app.hotkeyStop, false);
@@ -1171,7 +1188,7 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     MultiByteToWideChar(CP_ACP, 0, keyName4, -1, wKeyName4, 64);
     g_hHotkeyStopEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wKeyName4,
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_CENTER,
-        220, 300, 425, 48, hDlg, (HMENU)IDC_HOTKEY_STOP, GetModuleHandle(NULL), NULL);
+        220, 320, 425, 48, hDlg, (HMENU)IDC_HOTKEY_STOP, GetModuleHandle(NULL), NULL);
     SendMessage(g_hHotkeyStopEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
     SetWindowSubclass(g_hHotkeyStopEdit, HotkeyEditProc, 0, 0);
     
@@ -1179,23 +1196,26 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     HFONT hSmallFont = CreateFontW(13, 0, 0, 0, FW_NORMAL, TRUE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HWND hInstr = CreateWindowExW(0, L"STATIC", L"💡 Click any field and press your desired key (F1-F12, A-Z, 0-9)",
+    HWND hInstr = CreateWindowExW(0, L"STATIC", 
+        L"💡 Click any field above, then press your desired key combination\n"
+        L"Supported keys: F1-F12, A-Z, 0-9, and modifier combinations",
         WS_CHILD | WS_VISIBLE | SS_CENTER,
-        35, 385, 610, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
+        35, 405, 610, 38, hDlg, NULL, GetModuleHandle(NULL), NULL);
     SendMessage(hInstr, WM_SETFONT, (WPARAM)hSmallFont, TRUE);
     
     // Modern action buttons with proper spacing
-    HWND hOK = CreateWindowExW(0, L"BUTTON", L"✓ Save",
+    HWND hOK = CreateWindowExW(0, L"BUTTON", L"✓ Save Changes",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-        230, 450, 200, 58, hDlg, (HMENU)IDC_HOTKEY_OK, GetModuleHandle(NULL), NULL);
+        230, 470, 200, 58, hDlg, (HMENU)IDC_HOTKEY_OK, GetModuleHandle(NULL), NULL);
     SendMessage(hOK, WM_SETFONT, (WPARAM)hFont, TRUE);
     
     HWND hCancel = CreateWindowExW(0, L"BUTTON", L"✕ Cancel",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-        440, 450, 165, 58, hDlg, (HMENU)IDC_HOTKEY_CANCEL, GetModuleHandle(NULL), NULL);
+        440, 470, 165, 58, hDlg, (HMENU)IDC_HOTKEY_CANCEL, GetModuleHandle(NULL), NULL);
     SendMessage(hCancel, WM_SETFONT, (WPARAM)hFont, TRUE);
     
     DeleteObject(hSmallFont);
+    DeleteObject(hSubFont);
     DeleteObject(hEditFont);
     
     // Center on parent
@@ -1401,6 +1421,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return TRUE;
         }
         
+        case WM_TIMER: {
+            if (wParam == TIMER_STATUS_CHECK) {
+                // Check if playback has finished
+                if (g_app.isPlaying && !g_app.engine->IsPlaybackActive()) {
+                    g_app.isPlaying = false;
+                    SetWindowTextA(hwnd, "FLOW");
+                    UpdateStatusDisplay();
+                    InvalidateRect(hwnd, NULL, TRUE);
+                }
+            }
+            break;
+        }
+        
         case WM_HOTKEY: {
             if (wParam == HOTKEY_RECORD) {
                 ToggleRecording(hwnd);
@@ -1426,6 +1459,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         
         case WM_DESTROY:
+            KillTimer(hwnd, TIMER_STATUS_CHECK);
             PostQuitMessage(0);
             break;
             
@@ -1443,26 +1477,58 @@ void CreateControls(HWND hwnd) {
     int x = MARGIN;
     int y = MARGIN;
     
-    // Create modern toolbar buttons
+    // Font for button labels
+    HFONT hLabelFont = CreateFontW(11, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    
+    // Create modern toolbar buttons with labels underneath
+    const wchar_t* labels[] = {L"Open", L"Save", L"Record", L"Play", L"Stop All", L"Settings"};
+    int labelY = y + BUTTON_SIZE + 4;
+    
     CreateModernButton(hwnd, x, y, BTN_OPEN, DrawModernFolderIcon, ACCENT_PRIMARY, L"📁 Open Recording");
+    HWND hLabel1 = CreateWindowExW(0, L"STATIC", labels[0],
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
+    SendMessage(hLabel1, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
     x += BUTTON_SIZE + BUTTON_SPACING;
     
     CreateModernButton(hwnd, x, y, BTN_SAVE, DrawModernSaveIcon, SUCCESS_COLOR, L"💾 Save Recording");
+    HWND hLabel2 = CreateWindowExW(0, L"STATIC", labels[1],
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
+    SendMessage(hLabel2, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
     x += BUTTON_SIZE + BUTTON_SPACING;
     
     CreateModernButton(hwnd, x, y, BTN_RECORD, DrawModernRecordIcon, DANGER_COLOR, L"● Record (F8)");
+    HWND hLabel3 = CreateWindowExW(0, L"STATIC", labels[2],
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
+    SendMessage(hLabel3, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
     x += BUTTON_SIZE + BUTTON_SPACING;
     
     CreateModernButton(hwnd, x, y, BTN_PLAY, DrawModernPlayIcon, SUCCESS_COLOR, L"▶ Play (Ctrl+Shift+Alt+P)");
+    HWND hLabel4 = CreateWindowExW(0, L"STATIC", labels[3],
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
+    SendMessage(hLabel4, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
     x += BUTTON_SIZE + BUTTON_SPACING;
     
     CreateModernButton(hwnd, x, y, BTN_STOP_ALL, DrawModernStopIcon, DANGER_COLOR, L"■ Stop All (Pause)");
+    HWND hLabel5 = CreateWindowExW(0, L"STATIC", labels[4],
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
+    SendMessage(hLabel5, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
     x += BUTTON_SIZE + BUTTON_SPACING;
     
     CreateModernButton(hwnd, x, y, BTN_SETTINGS, DrawModernSettingsIcon, TEXT_SECONDARY, L"⚙ Settings");
+    HWND hLabel6 = CreateWindowExW(0, L"STATIC", labels[5],
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
+    SendMessage(hLabel6, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
     
-    // Modern status display area
-    y = TOOLBAR_HEIGHT + MARGIN;
+    // Modern status display area - adjusted for labels
+    y = TOOLBAR_HEIGHT + MARGIN + 4;
     
     // Auto-clicker toggle button with modern styling
     HWND hClickerBtn = CreateWindowExW(0, L"BUTTON", L"⚡ Auto-Clicker (F6)",
@@ -1552,6 +1618,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     RegisterHotkeys();
     
     CreateControls(g_app.hwnd);
+    
+    // Set timer to check playback status (check every 100ms)
+    SetTimer(g_app.hwnd, TIMER_STATUS_CHECK, 100, NULL);
+    
     ShowWindow(g_app.hwnd, nCmdShow);
     UpdateWindow(g_app.hwnd);
     
@@ -1562,6 +1632,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     }
     
     UnregisterHotkeys();
+    
+    KillTimer(g_app.hwnd, TIMER_STATUS_CHECK);
     
     g_app.engine->UninstallHooks();
     delete g_app.engine;
