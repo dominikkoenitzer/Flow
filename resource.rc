@@ -1,0 +1,6 @@
+#include <windows.h>
+
+// Application Icon
+#define IDI_APPICON 101
+
+IDI_APPICON ICON "FLOW.ico"
