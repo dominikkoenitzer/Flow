@@ -49,10 +49,32 @@ Write-Host "  ✓ Build directory ready" -ForegroundColor Green
 # Compile
 Write-Host "[3/4] Compiling FLOW..." -ForegroundColor Yellow
 
+# First compile the resource file
+$ResourceFile = Join-Path $ProjectRoot "resource.rc"
+$ResourceObj = Join-Path $BuildDir "resource.o"
+
+if (Test-Path $ResourceFile) {
+    Write-Host "  Compiling resources..." -ForegroundColor Gray
+    & windres $ResourceFile -O coff -o $ResourceObj 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ⚠ Resource compilation failed, continuing without icon" -ForegroundColor Yellow
+        $ResourceObj = $null
+    } else {
+        Write-Host "  ✓ Resources compiled" -ForegroundColor Green
+    }
+} else {
+    $ResourceObj = $null
+}
+
 $SourceFiles = @(
     (Join-Path $SrcDir "main.cpp"),
     (Join-Path $SrcDir "FlowEngine.cpp")
 )
+
+# Add resource object if it was compiled successfully
+if ($ResourceObj -and (Test-Path $ResourceObj)) {
+    $SourceFiles += $ResourceObj
+}
 
 $OutputExe = Join-Path $OutputDir "FLOW.exe"
 

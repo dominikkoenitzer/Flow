@@ -2,6 +2,19 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Compile Resource",
+            "type": "shell",
+            "command": "windres",
+            "args": [
+                "${workspaceFolder}/resource.rc",
+                "-O",
+                "coff",
+                "-o",
+                "${workspaceFolder}/build/resource.o"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Build FLOW",
             "type": "shell",
             "command": "g++",
@@ -16,12 +29,14 @@
                 "${workspaceFolder}/build/FLOW.exe",
                 "${workspaceFolder}/src/main.cpp",
                 "${workspaceFolder}/src/FlowEngine.cpp",
+                "${workspaceFolder}/build/resource.o",
                 "-luser32",
                 "-lgdi32",
                 "-lcomctl32",
                 "-static-libgcc",
                 "-static-libstdc++"
             ],
+            "dependsOn": ["Compile Resource"],
             "group": {
                 "kind": "build",
                 "isDefault": true

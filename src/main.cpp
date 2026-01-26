@@ -14,6 +14,9 @@
 #include <sstream>
 #include <cmath>
 
+// Icon resource ID
+#define IDI_APPICON 101
+
 using namespace flow;
 
 // ============================================================================
@@ -1584,8 +1587,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = CreateSolidBrush(BG_PRIMARY);
     wc.lpszClassName = L"FLOW_Modern";
-    wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-    wc.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
+    wc.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
     
     if (!RegisterClassExW(&wc)) {
         MessageBoxW(NULL, L"Window registration failed!", L"Error", MB_OK | MB_ICONERROR);
