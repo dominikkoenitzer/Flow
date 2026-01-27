@@ -3,7 +3,6 @@
   <assemblyIdentity
     type="win32"
     name="FLOW.Application"
-    version="2.0.0.0"
     processorArchitecture="*"/>
   
   <description>FLOW - Flexible Low-latency Operations Workflow</description>

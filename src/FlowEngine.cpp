@@ -3,7 +3,6 @@
  * @brief Implementation of the FLOW Input Automation Engine
  * 
  * @author FLOW Development Team
- * @version 1.0.0
  * @date 2026-01-21
  * 
  * @copyright Copyright (c) 2026 FLOW Project
@@ -495,12 +494,9 @@ bool FlowEngine::SaveMacro(const std::wstring& filename) {
     std::ofstream file(path, std::ios::binary);
     if (!file.is_open()) return false;
 
-    // Write header with version info
+    // Write header
     const char magic[4] = {'F', 'L', 'O', 'W'};
     file.write(magic, 4);
-    
-    uint32_t version = (FLOW_VERSION_MAJOR << 16) | (FLOW_VERSION_MINOR << 8) | FLOW_VERSION_PATCH;
-    file.write(reinterpret_cast<const char*>(&version), sizeof(version));
 
     // Write event count
     size_t count = recordedEvents.size();
@@ -526,10 +522,6 @@ bool FlowEngine::LoadMacro(const std::wstring& filename) {
     if (magic[0] != 'F' || magic[1] != 'L' || magic[2] != 'O' || magic[3] != 'W') {
         return false;
     }
-
-    // Read version (for future compatibility checks)
-    uint32_t version;
-    file.read(reinterpret_cast<char*>(&version), sizeof(version));
 
     // Read event count
     size_t count = 0;
