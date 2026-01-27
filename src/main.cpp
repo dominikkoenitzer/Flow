@@ -1331,7 +1331,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     break;
                 case MENU_ABOUT:
                     MessageBoxW(hwnd, 
-                        L"FLOW v2.0.0\n\n"
+                        L"FLOW\n\n"
                         L"Flexible Low-latency Operations Workflow\n\n"
                         L"A powerful macro automation tool\n\n"
                         L"Default Hotkeys:\n\n"
