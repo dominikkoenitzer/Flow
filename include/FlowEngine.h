@@ -3,7 +3,6 @@
  * @brief Core engine for the FLOW Input Automation System
  * 
  * @author FLOW Development Team
- * @version 1.0.0
  * @date 2026-01-21
  * 
  * @copyright Copyright (c) 2026 FLOW Project
@@ -27,11 +26,6 @@
 
 #ifndef FLOW_ENGINE_H
 #define FLOW_ENGINE_H
-
-#define FLOW_VERSION_MAJOR 1
-#define FLOW_VERSION_MINOR 0
-#define FLOW_VERSION_PATCH 0
-#define FLOW_VERSION "1.0.0"
 
 #include <Windows.h>
 #include <vector>
