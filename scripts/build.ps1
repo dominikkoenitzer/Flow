@@ -87,6 +87,7 @@ $CompileArgs = @(
     "-luser32",
     "-lgdi32",
     "-lcomctl32",
+    "-lgdiplus",
     "-static-libgcc",
     "-static-libstdc++"
 )
