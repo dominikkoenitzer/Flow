@@ -213,6 +213,7 @@ private:
     std::thread playbackThread;              ///< Playback worker thread
     std::atomic<int> loopCount;              ///< Loop count (-1 = infinite)
     std::atomic<int> currentLoopIteration;   ///< Current loop iteration (for display)
+    std::atomic<double> playbackSpeed;       ///< Playback speed multiplier (1.0 = realtime)
 
     // ===== Humanization =====
     HumanizationEngine humanizer;            ///< Timing variance generator
@@ -351,6 +352,18 @@ public:
      * @return Current loop number (starts at 1)
      */
     int GetCurrentLoop() const { return currentLoopIteration.load(); }
+
+    /**
+     * @brief Set the playback speed multiplier
+     * @param speed Multiplier (>1 faster, <1 slower); clamped to a sane minimum
+     */
+    void SetPlaybackSpeed(double speed) { playbackSpeed.store(speed > 0.01 ? speed : 0.01); }
+
+    /**
+     * @brief Get the current playback speed multiplier
+     * @return Speed multiplier
+     */
+    double GetPlaybackSpeed() const { return playbackSpeed.load(); }
 
     // ===== Humanization Control =====
     

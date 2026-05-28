@@ -10,9 +10,13 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <shellscalingapi.h>
+#include <gdiplus.h>
 #include <string>
 #include <sstream>
 #include <cmath>
+#include <fstream>
+#include <cstdlib>
+#include <cwchar>
 
 // Icon resource ID
 #define IDI_APPICON 101
@@ -20,34 +24,49 @@
 using namespace flow;
 
 // ============================================================================
-// MODERN DESIGN SYSTEM
+// DESIGN SYSTEM  (light, refined)
 // ============================================================================
 
-// Layout Constants
-constexpr int BUTTON_SIZE = 80;
-constexpr int BUTTON_SPACING = 12;
-constexpr int MARGIN = 20;
-constexpr int LABEL_HEIGHT = 20;
-constexpr int TOOLBAR_HEIGHT = BUTTON_SIZE + LABEL_HEIGHT + MARGIN * 2;
-constexpr int STATUS_HEIGHT = 100;
-constexpr int WINDOW_FULL_HEIGHT = TOOLBAR_HEIGHT + STATUS_HEIGHT;
-constexpr int CORNER_RADIUS = 8;
+// Refined light palette
+const COLORREF BG_PRIMARY      = RGB(243, 245, 249);   // window background
+const COLORREF BG_ELEVATED     = RGB(255, 255, 255);   // card / dialog surface
+const COLORREF ACCENT_PRIMARY  = RGB(37,  99,  235);   // blue 600
+const COLORREF ACCENT_HOVER    = RGB(59,  130, 246);   // blue 500
+const COLORREF ACCENT_PRESSED  = RGB(29,  78,  216);   // blue 700
+const COLORREF SUCCESS_COLOR   = RGB(22,  163, 74);    // green 600
+const COLORREF SUCCESS_HOVER   = RGB(34,  197, 94);    // green 500
+const COLORREF DANGER_COLOR    = RGB(220, 38,  38);    // red 600
+const COLORREF DANGER_HOVER    = RGB(239, 68,  68);    // red 500
+const COLORREF TEXT_PRIMARY    = RGB(17,  24,  39);    // near-black
+const COLORREF TEXT_SECONDARY  = RGB(100, 116, 139);   // slate 500
+const COLORREF TEXT_FAINT      = RGB(148, 163, 184);   // slate 400
+const COLORREF BORDER_DEFAULT  = RGB(226, 232, 240);   // slate 200
+const COLORREF TRACK_BG        = RGB(241, 245, 249);   // slate 100 (ghost / input)
+const COLORREF TRACK_HOVER     = RGB(226, 232, 240);   // slate 200
+const COLORREF SHADOW_COLOR    = RGB(148, 163, 184);
+const COLORREF BG_DIALOG       = RGB(255, 255, 255);
 
-// Modern Professional Color Palette
-const COLORREF BG_PRIMARY = RGB(248, 249, 252);           // Light background
-const COLORREF BG_ELEVATED = RGB(255, 255, 255);          // White cards
-const COLORREF ACCENT_PRIMARY = RGB(59, 130, 246);        // Modern blue
-const COLORREF ACCENT_HOVER = RGB(96, 165, 250);          // Lighter blue
-const COLORREF ACCENT_PRESSED = RGB(37, 99, 235);         // Darker blue
-const COLORREF SUCCESS_COLOR = RGB(34, 197, 94);          // Green
-const COLORREF SUCCESS_HOVER = RGB(74, 222, 128);
-const COLORREF DANGER_COLOR = RGB(239, 68, 68);           // Red
-const COLORREF DANGER_HOVER = RGB(248, 113, 113);
-const COLORREF TEXT_PRIMARY = RGB(15, 23, 42);            // Dark text
-const COLORREF TEXT_SECONDARY = RGB(100, 116, 139);       // Muted text
-const COLORREF BORDER_DEFAULT = RGB(226, 232, 240);       // Light border
-const COLORREF SHADOW_COLOR = RGB(148, 163, 184);         // Shadow
-const COLORREF BG_DIALOG = RGB(255, 255, 255);            // Dialog white
+// Layout (client-area coordinates, fixed-size window)
+constexpr int PAD          = 18;   // outer padding
+constexpr int GAP          = 14;   // gap between cards
+constexpr int COL_W        = 275;  // card column width
+constexpr int CARD_RADIUS  = 12;
+constexpr int BTN_RADIUS   = 9;
+constexpr int HEADER_H     = 58;
+constexpr int CLIENT_W     = 600;
+constexpr int CLIENT_H     = 426;
+
+// Card geometry
+constexpr int CARDS_TOP    = HEADER_H + 6;             // 64
+constexpr int LEFT_X       = PAD;                      // 18
+constexpr int RIGHT_X      = PAD + COL_W + GAP;        // 307
+constexpr int REC_H        = 120;
+constexpr int CLK_H        = 150;
+constexpr int REC_TOP      = CARDS_TOP;                // 64
+constexpr int CLK_TOP      = CARDS_TOP + REC_H + GAP;  // 198
+constexpr int PLAY_H       = REC_H + GAP + CLK_H;      // 284
+constexpr int FOOTER_TOP   = CARDS_TOP + PLAY_H + GAP; // 362
+constexpr int FOOTER_H     = 46;
 
 // ============================================================================
 // CONTROL IDs
@@ -61,36 +80,49 @@ enum ControlID {
     BTN_STOP_ALL = 105,
     BTN_SETTINGS = 106,
     BTN_TOGGLE_CLICKER = 107,
-    STATIC_STATUS = 108,
-    
-    MENU_SPEED_HALF = 201,
-    MENU_SPEED_1X = 202,
-    MENU_SPEED_2X = 203,
-    MENU_SPEED_100X = 204,
-    MENU_SPEED_CUSTOM = 205,
-    MENU_CONTINUOUS = 207,
-    MENU_SET_LOOPS = 208,
-    MENU_CLICK_INTERVAL = 209,
-    MENU_HUMANIZATION = 210,
+
+    EDIT_SPEED = 120,
+    EDIT_LOOPS = 121,
+    EDIT_INTERVAL = 122,
+    CHK_CONTINUOUS = 123,
+    CHK_HUMANIZE = 124,
+
     MENU_ALWAYS_ON_TOP = 211,
     MENU_CLEAR_RECORDING = 212,
     MENU_ABOUT = 213,
     MENU_CUSTOMIZE_HOTKEYS = 214,
-    
+
     HOTKEY_RECORD = 301,
     HOTKEY_PLAYBACK = 302,
     HOTKEY_CLICKER = 303,
     HOTKEY_STOP = 304,
-    
+
     IDC_HOTKEY_RECORD = 401,
     IDC_HOTKEY_PLAYBACK = 402,
     IDC_HOTKEY_CLICKER = 403,
     IDC_HOTKEY_STOP = 404,
     IDC_HOTKEY_OK = 405,
     IDC_HOTKEY_CANCEL = 406,
-    
+
     TIMER_STATUS_CHECK = 500,
 };
+
+// Cached UI fonts (created in WinMain, destroyed at exit)
+struct UiFonts {
+    HFONT wordmark = nullptr;  // bold brand
+    HFONT cardTitle = nullptr; // small uppercase section label
+    HFONT button = nullptr;    // button labels
+    HFONT body = nullptr;      // normal text
+    HFONT value = nullptr;     // edit-field values
+    HFONT pill = nullptr;      // status pill
+    HFONT small_ = nullptr;    // muted captions
+} g_fonts;
+
+// DPI scale factor (1.0 at 96 DPI). All layout constants above are design units
+// at 96 DPI; multiply through Sc()/Scf() so the UI scales on high-DPI monitors.
+static double g_scale = 1.0;
+static inline int   Sc(int v)    { return (int)(v * g_scale + 0.5); }
+static inline float Scf(float v) { return (float)(v * g_scale); }
 
 // ============================================================================
 // GLOBAL STATE
@@ -131,175 +163,175 @@ HWND g_hHotkeyClickerEdit = nullptr;
 HWND g_hHotkeyStopEdit = nullptr;
 
 // ============================================================================
-// MODERN ROUNDED RECTANGLE HELPER
+// SETTINGS PERSISTENCE
 // ============================================================================
 
-void DrawRoundedRect(HDC hdc, RECT rect, int radius, COLORREF fillColor, COLORREF borderColor = 0, int borderWidth = 0) {
-    // Create rounded region
-    HRGN hRgn = CreateRoundRectRgn(rect.left, rect.top, rect.right, rect.bottom, radius, radius);
-    
-    // Fill
-    HBRUSH brush = CreateSolidBrush(fillColor);
-    FillRgn(hdc, hRgn, brush);
-    DeleteObject(brush);
-    
-    // Optional border
-    if (borderWidth > 0 && borderColor != 0) {
-        HPEN pen = CreatePen(PS_SOLID, borderWidth, borderColor);
-        HPEN oldPen = (HPEN)SelectObject(hdc, pen);
-        HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
-        
-        RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, radius, radius);
-        
-        SelectObject(hdc, oldPen);
-        SelectObject(hdc, oldBrush);
-        DeleteObject(pen);
+std::string GetSettingsPath() {
+    const char* appdata = getenv("APPDATA");
+    std::string dir = appdata ? (std::string(appdata) + "\\FLOW") : std::string(".");
+    CreateDirectoryA(dir.c_str(), NULL);
+    return dir + "\\settings.cfg";
+}
+
+void SaveSettings() {
+    std::ofstream f(GetSettingsPath());
+    if (!f.is_open()) return;
+    f << "playbackSpeed=" << g_app.playbackSpeed << "\n";
+    f << "clickInterval=" << g_app.clickInterval << "\n";
+    f << "loopCount=" << g_app.loopCount << "\n";
+    f << "continuous=" << (g_app.continuous ? 1 : 0) << "\n";
+    f << "alwaysOnTop=" << (g_app.alwaysOnTop ? 1 : 0) << "\n";
+    f << "humanization=" << (g_app.humanizationEnabled ? 1 : 0) << "\n";
+    f << "humanizationStdDev=" << g_app.humanizationStdDev << "\n";
+    f << "hotkeyRecord=" << g_app.hotkeyRecord << "\n";
+    f << "hotkeyPlayback=" << g_app.hotkeyPlayback << "\n";
+    f << "hotkeyClicker=" << g_app.hotkeyClicker << "\n";
+    f << "hotkeyStop=" << g_app.hotkeyStop << "\n";
+}
+
+void LoadSettings() {
+    std::ifstream f(GetSettingsPath());
+    if (!f.is_open()) return;
+
+    std::string line;
+    while (std::getline(f, line)) {
+        // Strip a trailing carriage return (in case of CRLF files)
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        if (val.empty()) continue;
+
+        if (key == "playbackSpeed") {
+            double v = atof(val.c_str());
+            if (v >= 0.1 && v <= 100.0) g_app.playbackSpeed = (float)v;
+        } else if (key == "clickInterval") {
+            int v = atoi(val.c_str());
+            if (v >= 1 && v <= 10000) g_app.clickInterval = v;
+        } else if (key == "loopCount") {
+            int v = atoi(val.c_str());
+            if (v >= 1 && v <= 999) g_app.loopCount = v;
+        } else if (key == "continuous") {
+            g_app.continuous = (atoi(val.c_str()) != 0);
+        } else if (key == "alwaysOnTop") {
+            g_app.alwaysOnTop = (atoi(val.c_str()) != 0);
+        } else if (key == "humanization") {
+            g_app.humanizationEnabled = (atoi(val.c_str()) != 0);
+        } else if (key == "humanizationStdDev") {
+            double v = atof(val.c_str());
+            if (v >= 0.0 && v <= 1000.0) g_app.humanizationStdDev = v;
+        } else if (key == "hotkeyRecord") {
+            UINT v = (UINT)atoi(val.c_str());
+            if (v != 0) g_app.hotkeyRecord = v;
+        } else if (key == "hotkeyPlayback") {
+            UINT v = (UINT)atoi(val.c_str());
+            if (v != 0) g_app.hotkeyPlayback = v;
+        } else if (key == "hotkeyClicker") {
+            UINT v = (UINT)atoi(val.c_str());
+            if (v != 0) g_app.hotkeyClicker = v;
+        } else if (key == "hotkeyStop") {
+            UINT v = (UINT)atoi(val.c_str());
+            if (v != 0) g_app.hotkeyStop = v;
+        }
     }
-    
-    DeleteObject(hRgn);
 }
 
 // ============================================================================
-// MODERN ICON DRAWING FUNCTIONS
+// GDI+ DRAWING HELPERS  (anti-aliased)
 // ============================================================================
 
-void DrawModernFolderIcon(HDC hdc, int x, int y, int size, COLORREF color) {
-    int cx = x + size / 2;
-    int cy = y + size / 2;
-    int s = size / 3;
-    
-    // Folder body
-    RECT body = {cx - s, cy - s/2, cx + s, cy + s};
-    DrawRoundedRect(hdc, body, 4, color);
-    
-    // Folder tab
-    RECT tab = {cx - s, cy - s/2 - 6, cx, cy - s/2};
-    DrawRoundedRect(hdc, tab, 3, color);
+static inline Gdiplus::Color GP(COLORREF c, BYTE a = 255) {
+    return Gdiplus::Color(a, GetRValue(c), GetGValue(c), GetBValue(c));
 }
 
-void DrawModernSaveIcon(HDC hdc, int x, int y, int size, COLORREF color) {
-    int cx = x + size / 2;
-    int cy = y + size / 2;
-    int s = size / 3;
-    
-    // Disk body
-    RECT body = {cx - s, cy - s, cx + s, cy + s};
-    DrawRoundedRect(hdc, body, 4, color);
-    
-    // Disk notch
-    RECT notch = {cx - s + 4, cy - s, cx + s - 4, cy - s/2};
-    DrawRoundedRect(hdc, notch, 2, BG_ELEVATED);
+static void AddRoundRectPath(Gdiplus::GraphicsPath& path, float x, float y,
+                             float w, float h, float r) {
+    float d = r * 2.0f;
+    path.Reset();
+    path.AddArc(x, y, d, d, 180.0f, 90.0f);
+    path.AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
+    path.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
+    path.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
+    path.CloseFigure();
 }
 
-void DrawModernRecordIcon(HDC hdc, int x, int y, int size, COLORREF color) {
-    int cx = x + size / 2;
-    int cy = y + size / 2;
-    int r = size / 5;
-    
-    HBRUSH brush = CreateSolidBrush(color);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
-    SelectObject(hdc, GetStockObject(NULL_PEN));
-    
-    Ellipse(hdc, cx - r, cy - r, cx + r, cy + r);
-    
-    SelectObject(hdc, oldBrush);
-    DeleteObject(brush);
+static void FillRound(Gdiplus::Graphics& g, float x, float y, float w, float h,
+                      float r, Gdiplus::Color fill) {
+    Gdiplus::GraphicsPath path;
+    AddRoundRectPath(path, x, y, w, h, r);
+    Gdiplus::SolidBrush brush(fill);
+    g.FillPath(&brush, &path);
 }
 
-void DrawModernPlayIcon(HDC hdc, int x, int y, int size, COLORREF color) {
-    int cx = x + size / 2;
-    int cy = y + size / 2;
-    int s = size / 4;
-    
-    HBRUSH brush = CreateSolidBrush(color);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
-    SelectObject(hdc, GetStockObject(NULL_PEN));
-    
-    POINT tri[3] = {
-        {cx - s/2, cy - s},
-        {cx - s/2, cy + s},
-        {cx + s, cy}
+static void StrokeRound(Gdiplus::Graphics& g, float x, float y, float w, float h,
+                        float r, Gdiplus::Color stroke, float width = 1.0f) {
+    Gdiplus::GraphicsPath path;
+    // Inset by half the pen width so the stroke stays inside the rect
+    AddRoundRectPath(path, x + width / 2, y + width / 2, w - width, h - width, r);
+    Gdiplus::Pen pen(stroke, width);
+    g.DrawPath(&pen, &path);
+}
+
+// Draw a white card with a soft drop shadow and a hairline border.
+static void DrawCard(Gdiplus::Graphics& g, int x, int y, int w, int h) {
+    float r = Scf((float)CARD_RADIUS);
+    // Soft shadow: a few translucent offset rounds
+    for (int i = 3; i >= 1; --i) {
+        BYTE a = (BYTE)(10 + (3 - i) * 6);
+        FillRound(g, (float)(x - i + 1), (float)(y + i), (float)(w + 2 * i - 2),
+                  (float)(h + i), r + i, GP(SHADOW_COLOR, a));
+    }
+    FillRound(g, (float)x, (float)y, (float)w, (float)h, r, GP(BG_ELEVATED));
+    StrokeRound(g, (float)x, (float)y, (float)w, (float)h, r, GP(BORDER_DEFAULT), Scf(1.0f));
+}
+
+// ---- Vector glyphs (centered at cx,cy, half-extent s) ----
+static void IconCircle(Gdiplus::Graphics& g, float cx, float cy, float r, Gdiplus::Color c) {
+    Gdiplus::SolidBrush b(c);
+    g.FillEllipse(&b, cx - r, cy - r, r * 2, r * 2);
+}
+static void IconTriangle(Gdiplus::Graphics& g, float cx, float cy, float s, Gdiplus::Color c) {
+    Gdiplus::PointF pts[3] = {
+        Gdiplus::PointF(cx - s * 0.55f, cy - s),
+        Gdiplus::PointF(cx - s * 0.55f, cy + s),
+        Gdiplus::PointF(cx + s * 0.9f,  cy)
     };
-    Polygon(hdc, tri, 3);
-    
-    SelectObject(hdc, oldBrush);
-    DeleteObject(brush);
+    Gdiplus::SolidBrush b(c);
+    g.FillPolygon(&b, pts, 3);
 }
-
-void DrawModernStopIcon(HDC hdc, int x, int y, int size, COLORREF color) {
-    int cx = x + size / 2;
-    int cy = y + size / 2;
-    int s = size / 5;
-    
-    RECT square = {cx - s, cy - s, cx + s, cy + s};
-    DrawRoundedRect(hdc, square, 3, color);
+static void IconSquare(Gdiplus::Graphics& g, float cx, float cy, float s, Gdiplus::Color c) {
+    FillRound(g, cx - s, cy - s, s * 2, s * 2, 3.0f, c);
 }
-
-void DrawModernSettingsIcon(HDC hdc, int x, int y, int size, COLORREF color) {
-    int cx = x + size / 2;
-    int cy = y + size / 2;
-    int r = size / 6;
-    
-    // Center circle
-    HBRUSH brush = CreateSolidBrush(color);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, brush);
-    SelectObject(hdc, GetStockObject(NULL_PEN));
-    
-    Ellipse(hdc, cx - r/2, cy - r/2, cx + r/2, cy + r/2);
-    
-    // Gear teeth (6 rectangles around center)
-    for (int i = 0; i < 6; i++) {
-        double angle = i * 3.14159265 / 3.0;
-        int x1 = cx + (int)(r * 1.8 * cos(angle));
-        int y1 = cy + (int)(r * 1.8 * sin(angle));
-        RECT tooth = {x1 - 3, y1 - 6, x1 + 3, y1 + 6};
-        
-        // Rotate rectangle
-        XFORM xform;
-        SetGraphicsMode(hdc, GM_ADVANCED);
-        GetWorldTransform(hdc, &xform);
-        
-        XFORM rot;
-        rot.eM11 = (FLOAT)cos(angle);
-        rot.eM12 = (FLOAT)sin(angle);
-        rot.eM21 = (FLOAT)-sin(angle);
-        rot.eM22 = (FLOAT)cos(angle);
-        rot.eDx = (FLOAT)cx;
-        rot.eDy = (FLOAT)cy;
-        SetWorldTransform(hdc, &rot);
-        
-        Rectangle(hdc, x1 - cx - 3, y1 - cy - 6, x1 - cx + 3, y1 - cy + 6);
-        
-        SetWorldTransform(hdc, &xform);
-        SetGraphicsMode(hdc, GM_COMPATIBLE);
-    }
-    
-    SelectObject(hdc, oldBrush);
-    DeleteObject(brush);
+static void IconBolt(Gdiplus::Graphics& g, float cx, float cy, float s, Gdiplus::Color c) {
+    float u = s / 8.0f;
+    Gdiplus::PointF pts[6] = {
+        Gdiplus::PointF(cx + 1.0f * u, cy - 8.0f * u),
+        Gdiplus::PointF(cx - 4.0f * u, cy + 1.0f * u),
+        Gdiplus::PointF(cx - 0.5f * u, cy + 1.0f * u),
+        Gdiplus::PointF(cx - 1.5f * u, cy + 8.0f * u),
+        Gdiplus::PointF(cx + 4.0f * u, cy - 2.0f * u),
+        Gdiplus::PointF(cx + 0.5f * u, cy - 2.0f * u)
+    };
+    Gdiplus::SolidBrush b(c);
+    g.FillPolygon(&b, pts, 6);
 }
 
 // ============================================================================
-// MODERN BUTTON CREATION
+// OWNER-DRAW BUTTONS
 // ============================================================================
 
-HWND CreateModernButton(HWND parent, int x, int y, int id, 
-                        void (*drawFunc)(HDC, int, int, int, COLORREF),
-                        COLORREF color, const wchar_t* tooltip) {
+HWND CreateFlowButton(HWND parent, int id, int x, int y, int w, int h, const wchar_t* tooltip) {
     HWND btn = CreateWindowExW(0, L"BUTTON", L"",
         WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-        x, y, BUTTON_SIZE, BUTTON_SIZE,
-        parent, (HMENU)(LONG_PTR)id, GetModuleHandle(NULL), NULL);
-    
-    // Store draw function pointer
-    SetWindowLongPtrW(btn, GWLP_USERDATA, (LONG_PTR)drawFunc);
-    
-    // Create tooltip
+        x, y, w, h, parent, (HMENU)(LONG_PTR)id, GetModuleHandle(NULL), NULL);
+
     if (tooltip) {
         HWND hwndTT = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, NULL,
             WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
             CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
             parent, NULL, GetModuleHandle(NULL), NULL);
-        
         TOOLINFOW ti = {};
         ti.cbSize = sizeof(TOOLINFOW);
         ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
@@ -308,103 +340,188 @@ HWND CreateModernButton(HWND parent, int x, int y, int id,
         ti.lpszText = (LPWSTR)tooltip;
         SendMessageW(hwndTT, TTM_ADDTOOLW, 0, (LPARAM)&ti);
     }
-    
     return btn;
+}
+
+enum class BtnIcon { None, Record, Play, Bolt, Stop };
+enum class BtnStyle { Ghost, Filled };
+
+// Render a single owner-draw button.
+static void DrawFlowButton(DRAWITEMSTRUCT* dis) {
+    HDC hdc = dis->hDC;
+    RECT rc = dis->rcItem;
+    int w = rc.right - rc.left;
+    int h = rc.bottom - rc.top;
+    bool pressed = (dis->itemState & ODS_SELECTED) != 0;
+
+    // Resolve per-button appearance
+    const wchar_t* label = L"";
+    BtnIcon icon = BtnIcon::None;
+    BtnStyle style = BtnStyle::Ghost;
+    COLORREF accent = ACCENT_PRIMARY;   // used for icon (ghost) or fill (filled)
+    bool active = false;
+
+    switch (dis->CtlID) {
+        case BTN_RECORD:
+            active = g_app.isRecording; accent = DANGER_COLOR; icon = BtnIcon::Record;
+            label = active ? L"Recording" : L"Record"; break;
+        case BTN_PLAY:
+            active = g_app.isPlaying; accent = SUCCESS_COLOR; icon = BtnIcon::Play;
+            label = active ? L"Playing" : L"Play"; break;
+        case BTN_TOGGLE_CLICKER:
+            active = g_app.isClicking; accent = ACCENT_PRIMARY; icon = BtnIcon::Bolt;
+            label = active ? L"Clicking" : L"Start"; break;
+        case BTN_STOP_ALL:
+            style = BtnStyle::Filled; accent = DANGER_COLOR; icon = BtnIcon::Stop;
+            label = L"Stop All"; active = true; break;
+        case BTN_OPEN:   label = L"Open";     accent = ACCENT_PRIMARY; break;
+        case BTN_SAVE:   label = L"Save";     accent = ACCENT_PRIMARY; break;
+        case BTN_SETTINGS: label = L"Settings"; accent = TEXT_SECONDARY; break;
+        default: break;
+    }
+    if (active) style = BtnStyle::Filled;
+
+    COLORREF fillCol, textCol, iconCol, borderCol = BORDER_DEFAULT;
+    bool drawBorder = false;
+    if (style == BtnStyle::Filled) {
+        fillCol = pressed ? ACCENT_PRESSED : accent;
+        if (accent == DANGER_COLOR)  fillCol = pressed ? DANGER_COLOR  : DANGER_HOVER;
+        if (accent == SUCCESS_COLOR) fillCol = pressed ? SUCCESS_COLOR : SUCCESS_HOVER;
+        if (accent == ACCENT_PRIMARY)fillCol = pressed ? ACCENT_PRESSED: ACCENT_PRIMARY;
+        textCol = RGB(255, 255, 255);
+        iconCol = RGB(255, 255, 255);
+    } else {
+        fillCol = pressed ? TRACK_HOVER : TRACK_BG;
+        textCol = TEXT_PRIMARY;
+        iconCol = accent;
+        drawBorder = true;
+    }
+
+    // The surface the button sits on (so the rounded corners blend in):
+    // footer buttons are on the gray window, card buttons are on white cards.
+    COLORREF behind = (dis->CtlID == BTN_OPEN || dis->CtlID == BTN_SAVE ||
+                       dis->CtlID == BTN_SETTINGS || dis->CtlID == BTN_STOP_ALL)
+                          ? BG_PRIMARY : BG_ELEVATED;
+
+    // Background (anti-aliased)
+    {
+        HBRUSH bb = CreateSolidBrush(behind);
+        FillRect(hdc, &rc, bb);
+        DeleteObject(bb);
+
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        float br = Scf((float)BTN_RADIUS);
+        FillRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, br, GP(fillCol));
+        if (drawBorder)
+            StrokeRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, br, GP(borderCol), Scf(1.0f));
+    }
+
+    // Measure label to center the icon + text group
+    HFONT old = (HFONT)SelectObject(hdc, g_fonts.button);
+    SIZE ts;
+    GetTextExtentPoint32W(hdc, label, (int)wcslen(label), &ts);
+
+    float iconW = (icon == BtnIcon::None) ? 0.0f : Scf(16.0f);
+    float iconGap = (icon == BtnIcon::None) ? 0.0f : Scf(9.0f);
+    float groupW = iconW + iconGap + ts.cx;
+    float startX = (w - groupW) / 2.0f;
+    float midY = h / 2.0f;
+
+    if (icon != BtnIcon::None) {
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        float icx = startX + iconW / 2.0f;
+        Gdiplus::Color ic = GP(iconCol);
+        switch (icon) {
+            case BtnIcon::Record:   IconCircle(g, icx, midY, Scf(6.5f), ic); break;
+            case BtnIcon::Play:     IconTriangle(g, icx, midY, Scf(7.5f), ic); break;
+            case BtnIcon::Bolt:     IconBolt(g, icx, midY, Scf(9.0f), ic); break;
+            case BtnIcon::Stop:     IconSquare(g, icx, midY, Scf(6.0f), ic); break;
+            default: break;
+        }
+    }
+
+    // Label
+    RECT tr = rc;
+    tr.left = (LONG)(startX + iconW + iconGap);
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, textCol);
+    DrawTextW(hdc, label, -1, &tr, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(hdc, old);
+}
+
+// A centered, rounded dialog button (primary = filled accent, else ghost).
+// Dialogs sit on a BG_PRIMARY surface.
+static void DrawDlgButton(DRAWITEMSTRUCT* dis, const wchar_t* label, bool primary) {
+    HDC hdc = dis->hDC;
+    RECT rc = dis->rcItem;
+    int w = rc.right - rc.left, h = rc.bottom - rc.top;
+    bool pressed = (dis->itemState & ODS_SELECTED) != 0;
+
+    COLORREF fill, text; bool border = false;
+    if (primary) {
+        fill = pressed ? ACCENT_PRESSED : ACCENT_PRIMARY;
+        text = RGB(255, 255, 255);
+    } else {
+        fill = pressed ? TRACK_HOVER : TRACK_BG;
+        text = TEXT_PRIMARY;
+        border = true;
+    }
+
+    HBRUSH bb = CreateSolidBrush(BG_PRIMARY);
+    FillRect(hdc, &rc, bb);
+    DeleteObject(bb);
+
+    {
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        float br = Scf((float)BTN_RADIUS);
+        FillRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, br, GP(fill));
+        if (border)
+            StrokeRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, br, GP(BORDER_DEFAULT), Scf(1.0f));
+    }
+
+    HFONT old = (HFONT)SelectObject(hdc, g_fonts.button);
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, text);
+    DrawTextW(hdc, label, -1, &rc, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(hdc, old);
 }
 
 // ============================================================================
 // STATUS DISPLAY
 // ============================================================================
 
+// The header pill and card contents are rendered in WM_PAINT, and the
+// owner-draw buttons reflect record/play/click state, so a refresh invalidates
+// the painted surface AND the child controls. (No erase => no flicker.)
 void UpdateStatusDisplay() {
-    HWND hStatus = GetDlgItem(g_app.hwnd, STATIC_STATUS);
-    if (!hStatus) return;
-    
-    std::wstringstream ss;
-    
-    if (g_app.isRecording) {
-        ss << L"● RECORDING";
-    } else if (g_app.isPlaying) {
-        ss << L"▶ PLAYING";
-    } else if (g_app.isClicking) {
-        ss << L"⚡ AUTO-CLICKING (" << g_app.clickInterval << L"ms)";
-    } else {
-        ss << L"● Ready";
-    }
-    
-    ss << L"  |  Speed: " << g_app.playbackSpeed << L"x";
-    if (g_app.loopCount > 1 && !g_app.continuous) {
-        ss << L"  |  Loops: " << g_app.loopCount;
-    } else if (g_app.continuous) {
-        ss << L"  |  Loops: ∞";
-    }
-    
-    SetWindowTextW(hStatus, ss.str().c_str());
+    if (g_app.hwnd)
+        RedrawWindow(g_app.hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
 
 // ============================================================================
 // SETTINGS MENU
 // ============================================================================
 
+// Speed / loops / interval / humanization / continuous now live inline on the
+// cards. The menu only carries the occasional actions.
 void ShowSettingsMenu(HWND hwnd) {
     HMENU hMenu = CreatePopupMenu();
-    
-    // Playback Speed
-    HMENU hSpeedMenu = CreatePopupMenu();
-    AppendMenuW(hSpeedMenu, MF_STRING | (g_app.playbackSpeed == 0.5f ? MF_CHECKED : 0), 
-               MENU_SPEED_HALF, L"Play Speed: 1/2x");
-    AppendMenuW(hSpeedMenu, MF_STRING | (g_app.playbackSpeed == 1.0f ? MF_CHECKED : 0), 
-               MENU_SPEED_1X, L"Play Speed: 1x");
-    AppendMenuW(hSpeedMenu, MF_STRING | (g_app.playbackSpeed == 2.0f ? MF_CHECKED : 0), 
-               MENU_SPEED_2X, L"Play Speed: 2x");
-    AppendMenuW(hSpeedMenu, MF_STRING | (g_app.playbackSpeed == 100.0f ? MF_CHECKED : 0), 
-               MENU_SPEED_100X, L"Play Speed: 100x");
-    AppendMenuW(hSpeedMenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hSpeedMenu, MF_STRING, MENU_SPEED_CUSTOM, L"Set Custom Speed...");
-    
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSpeedMenu, L"Playback Speed");
+
+    AppendMenuW(hMenu, MF_STRING, MENU_CUSTOMIZE_HOTKEYS, L"Customize Hotkeys…");
+    AppendMenuW(hMenu, MF_STRING | (g_app.alwaysOnTop ? MF_CHECKED : 0),
+                MENU_ALWAYS_ON_TOP, L"Always on Top");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    
-    // Playback Options
-    AppendMenuW(hMenu, MF_STRING | (g_app.continuous ? MF_CHECKED : 0), 
-               MENU_CONTINUOUS, L"🔁 Continuous Playback");
-    
-    // Show current loop count in menu
-    wchar_t loopMenuText[64];
-    swprintf(loopMenuText, 64, L"🔢 Set Playback Loops...  (%d)", g_app.loopCount);
-    AppendMenuW(hMenu, MF_STRING, MENU_SET_LOOPS, loopMenuText);
+    AppendMenuW(hMenu, MF_STRING, MENU_CLEAR_RECORDING, L"Clear Recording");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    
-    // Auto-Clicker
-    wchar_t intervalMenuText[64];
-    swprintf(intervalMenuText, 64, L"⚡ Auto-Clicker Interval...  (%d ms)", g_app.clickInterval);
-    AppendMenuW(hMenu, MF_STRING, MENU_CLICK_INTERVAL, intervalMenuText);
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    
-    // Humanization
-    HMENU hHumanMenu = CreatePopupMenu();
-    AppendMenuW(hHumanMenu, MF_STRING | (g_app.humanizationEnabled ? MF_CHECKED : 0),
-               MENU_HUMANIZATION, L"✨ Enable Humanization");
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hHumanMenu, L"🎭 Humanization");
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    
-    // Recording
-    AppendMenuW(hMenu, MF_STRING, MENU_CLEAR_RECORDING, L"🗑 Clear Recording");
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    
-    // Hotkeys
-    AppendMenuW(hMenu, MF_STRING, MENU_CUSTOMIZE_HOTKEYS, L"⌨ Customize Hotkeys...");
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    
-    // Window Options
-    AppendMenuW(hMenu, MF_STRING | (g_app.alwaysOnTop ? MF_CHECKED : 0), 
-               MENU_ALWAYS_ON_TOP, L"📌 Always on Top");
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hMenu, MF_STRING, MENU_ABOUT, L"ℹ About FLOW");
-    
-    POINT pt;
-    GetCursorPos(&pt);
-    TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, hwnd, NULL);
+    AppendMenuW(hMenu, MF_STRING, MENU_ABOUT, L"About FLOW");
+
+    // Pop up just below the Settings button
+    RECT rcBtn;
+    GetWindowRect(GetDlgItem(hwnd, BTN_SETTINGS), &rcBtn);
+    TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN, rcBtn.left, rcBtn.bottom + 4, 0, hwnd, NULL);
     DestroyMenu(hMenu);
 }
 
@@ -431,6 +548,8 @@ void OpenMacroFile(HWND hwnd) {
     if (GetOpenFileNameW(&ofn)) {
         if (!g_app.engine->LoadMacro(szFile)) {
             MessageBoxA(hwnd, "Failed to load macro file!", "Error", MB_OK | MB_ICONERROR);
+        } else {
+            UpdateStatusDisplay();
         }
     }
 }
@@ -478,8 +597,9 @@ void TogglePlayback(HWND hwnd) {
         g_app.isPlaying = false;
         SetWindowTextA(hwnd, "FLOW");
     } else {
+        g_app.engine->SetPlaybackSpeed(g_app.playbackSpeed);
         if (g_app.continuous) {
-            g_app.engine->StartPlayback(999999);
+            g_app.engine->StartPlayback(-1);
         } else {
             g_app.engine->StartPlayback(g_app.loopCount);
         }
@@ -488,6 +608,14 @@ void TogglePlayback(HWND hwnd) {
     }
     UpdateStatusDisplay();
     InvalidateRect(hwnd, NULL, TRUE);
+}
+
+void SetPlaybackSpeed(float speed) {
+    g_app.playbackSpeed = speed;
+    if (g_app.engine) {
+        g_app.engine->SetPlaybackSpeed(speed);
+    }
+    UpdateStatusDisplay();
 }
 
 void ToggleAutoClicker() {
@@ -533,7 +661,7 @@ void RegisterHotkeys() {
     RegisterHotKey(g_app.hwnd, HOTKEY_RECORD, 0, g_app.hotkeyRecord);
     RegisterHotKey(g_app.hwnd, HOTKEY_PLAYBACK, g_app.hotkeyModifiers, g_app.hotkeyPlayback);
     RegisterHotKey(g_app.hwnd, HOTKEY_CLICKER, 0, g_app.hotkeyClicker);
-    RegisterHotKey(g_app.hwnd, HOTKEY_STOP, 0, VK_PAUSE);
+    RegisterHotKey(g_app.hwnd, HOTKEY_STOP, 0, g_app.hotkeyStop);
 }
 
 void UnregisterHotkeys() {
@@ -587,453 +715,107 @@ const char* GetKeyName(UINT vk, bool withModifiers = false) {
 // ============================================================================
 
 // Dialog controls
-#define IDC_LOOP_EDIT 1001
-#define IDC_LOOP_OK 1002
-#define IDC_LOOP_CANCEL 1003
-#define IDC_INTERVAL_EDIT 1004
-#define IDC_INTERVAL_OK 1005
-#define IDC_INTERVAL_CANCEL 1006
 #define IDC_HOTKEY_RECORD 1007
 #define IDC_HOTKEY_PLAYBACK 1008
 #define IDC_HOTKEY_CLICKER 1009
 #define IDC_HOTKEY_OK 1010
 #define IDC_HOTKEY_CANCEL 1011
 
-INT_PTR CALLBACK LoopCountDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
-    switch (message) {
-        case WM_INITDIALOG: {
-            // Center the dialog
-            RECT rcDlg, rcOwner;
-            GetWindowRect(hDlg, &rcDlg);
-            GetWindowRect(GetParent(hDlg), &rcOwner);
-            int x = rcOwner.left + (rcOwner.right - rcOwner.left - (rcDlg.right - rcDlg.left)) / 2;
-            int y = rcOwner.top + (rcOwner.bottom - rcOwner.top - (rcDlg.bottom - rcDlg.top)) / 2;
-            SetWindowPos(hDlg, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-            
-            // Set current loop count in edit box
-            char buffer[32];
-            sprintf(buffer, "%d", g_app.loopCount);
-            SetDlgItemTextA(hDlg, IDC_LOOP_EDIT, buffer);
-            
-            // Select all text
-            SendDlgItemMessageA(hDlg, IDC_LOOP_EDIT, EM_SETSEL, 0, -1);
-            SetFocus(GetDlgItem(hDlg, IDC_LOOP_EDIT));
-            return FALSE; // We set the focus
-        }
-        
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case IDC_LOOP_OK:
-                case IDOK: {
-                    char buffer[32];
-                    GetDlgItemTextA(hDlg, IDC_LOOP_EDIT, buffer, sizeof(buffer));
-                    int value = atoi(buffer);
-                    if (value >= 1 && value <= 999) {
-                        g_app.loopCount = value;
-                        UpdateStatusDisplay();
-                        EndDialog(hDlg, IDOK);
-                    } else {
-                        MessageBoxA(hDlg, "Please enter a value between 1 and 999.", "Invalid Input", MB_OK | MB_ICONWARNING);
-                        SetFocus(GetDlgItem(hDlg, IDC_LOOP_EDIT));
-                    }
-                    return TRUE;
-                }
-                case IDC_LOOP_CANCEL:
-                case IDCANCEL:
-                    EndDialog(hDlg, IDCANCEL);
-                    return TRUE;
-            }
-            break;
-            
-        case WM_CLOSE:
-            EndDialog(hDlg, IDCANCEL);
-            return TRUE;
-    }
-    return FALSE;
-}
-
-void ShowCustomSpeedDialog(HWND hwnd) {
-    char buffer[64];
-    sprintf(buffer, "%.2f", g_app.playbackSpeed);
-    
-    // For simplicity, use MessageBox instead
-    if (MessageBoxA(hwnd, "Enter custom playback speed\n(Use Settings menu to configure)",
-                    "Custom Speed", MB_OK | MB_ICONINFORMATION) == IDOK) {
-        // Custom dialog would go here
-    }
-}
-
-// Global variables for dialog
-static HWND g_hLoopEdit = NULL;
-
-LRESULT CALLBACK LoopDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case IDC_LOOP_OK: {
-                    char buffer[32];
-                    GetWindowTextA(g_hLoopEdit, buffer, sizeof(buffer));
-                    int value = atoi(buffer);
-                    if (value >= 1 && value <= 999) {
-                        g_app.loopCount = value;
-                        UpdateStatusDisplay();
-                        EndDialog(hDlg, IDOK);
-                    } else {
-                        MessageBoxA(hDlg, "Please enter a value between 1 and 999.", "Invalid Input", MB_OK | MB_ICONWARNING);
-                    }
-                    return TRUE;
-                }
-                case IDC_LOOP_CANCEL:
-                    EndDialog(hDlg, IDCANCEL);
-                    return TRUE;
-            }
-            break;
-            
-        case WM_CLOSE:
-            EndDialog(hDlg, IDCANCEL);
-            return TRUE;
-    }
-    return FALSE;
-}
-
-void ShowLoopCountDialog(HWND hwnd) {
-    // Use DialogBox with inline template
-    struct {
-        DLGTEMPLATE dlg;
-        WORD menu;
-        WORD windowClass;
-        WCHAR title[32];
-        WORD fontSize;
-        WCHAR fontName[16];
-    } template_data;
-    
-    memset(&template_data, 0, sizeof(template_data));
-    template_data.dlg.style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_SETFONT | DS_CENTER;
-    template_data.dlg.dwExtendedStyle = 0;
-    template_data.dlg.cdit = 0;
-    template_data.dlg.x = 0;
-    template_data.dlg.y = 0;
-    template_data.dlg.cx = 180;
-    template_data.dlg.cy = 70;
-    template_data.menu = 0;
-    template_data.windowClass = 0;
-    wcscpy(template_data.title, L"Set Playback Loops");
-    template_data.fontSize = 9;
-    wcscpy(template_data.fontName, L"Segoe UI");
-    
-    // Create the dialog window manually
-    HWND hDlg = CreateDialogIndirectParamW(
-        GetModuleHandle(NULL),
-        &template_data.dlg,
-        hwnd,
-        (DLGPROC)LoopDialogWndProc,
-        0);
-    
-    if (!hDlg) {
-        wchar_t buffer[64];
-        swprintf(buffer, 64, L"Current: %d loops\n\nEnter new loop count (1-999):", g_app.loopCount);
-        MessageBoxW(hwnd, buffer, L"Set Loop Count", MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    
-    // Professional modern window - larger, clean design
-    SetWindowPos(hDlg, HWND_TOPMOST, 0, 0, 600, 340, SWP_NOMOVE);
-    
-    // Modern elevated background
-    SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(BG_ELEVATED));
-    
-    // Professional typography system
-    HFONT hTitleFont = CreateFontW(22, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT hFont = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT hEditFont = CreateFontW(16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    
-    // Modern title with icon
-    HWND hTitle = CreateWindowExW(0, L"STATIC", L"🔁 Loop Settings",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 30, 530, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hTitle, WM_SETFONT, (WPARAM)hTitleFont, TRUE);
-    
-    // Clean description with better formatting
-    HWND hLabel = CreateWindowExW(0, L"STATIC", 
-        L"How many times should the recording play?\n"
-        L"Enter a value between 1 and 999, or enable continuous mode.",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 85, 530, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    // Modern input field with rounded appearance
-    wchar_t currentValue[32];
-    swprintf(currentValue, 32, L"%d", g_app.loopCount);
-    g_hLoopEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", currentValue,
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_NUMBER | ES_AUTOHSCROLL | ES_CENTER,
-        35, 130, 530, 52, hDlg, (HMENU)IDC_LOOP_EDIT, GetModuleHandle(NULL), NULL);
-    SendMessage(g_hLoopEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
-    SendMessage(g_hLoopEdit, EM_SETSEL, 0, -1);
-    
-    // Modern action buttons with proper spacing
-    HWND hOK = CreateWindowExW(0, L"BUTTON", L"✓ Apply Changes",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-        190, 240, 200, 56, hDlg, (HMENU)IDC_LOOP_OK, GetModuleHandle(NULL), NULL);
-    SendMessage(hOK, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    HWND hCancel = CreateWindowExW(0, L"BUTTON", L"✕ Cancel",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-        400, 240, 165, 56, hDlg, (HMENU)IDC_LOOP_CANCEL, GetModuleHandle(NULL), NULL);
-    SendMessage(hCancel, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    DeleteObject(hEditFont);
-    
-    // Center on parent
-    RECT rcDlg, rcParent;
-    GetWindowRect(hDlg, &rcDlg);
-    GetWindowRect(hwnd, &rcParent);
-    int x = rcParent.left + (rcParent.right - rcParent.left - (rcDlg.right - rcDlg.left)) / 2;
-    int y = rcParent.top + (rcParent.bottom - rcParent.top - (rcDlg.bottom - rcDlg.top)) / 2;
-    SetWindowPos(hDlg, HWND_TOP, x, y, 0, 0, SWP_NOSIZE);
-    
-    // Show and activate
-    ShowWindow(hDlg, SW_SHOW);
-    SetFocus(g_hLoopEdit);
-    
-    // Modal loop
-    EnableWindow(hwnd, FALSE);
-    MSG msg;
-    while (IsWindow(hDlg) && GetMessage(&msg, NULL, 0, 0)) {
-        if (!IsDialogMessage(hDlg, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
-    EnableWindow(hwnd, TRUE);
-    SetFocus(hwnd);
-    
-    DeleteObject(hFont);
-    DeleteObject(hTitleFont);
-}
-
-// Global variable for click interval dialog
-static HWND g_hIntervalEdit = NULL;
-
-LRESULT CALLBACK IntervalDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case IDC_INTERVAL_OK: {
-                    char buffer[32];
-                    GetWindowTextA(g_hIntervalEdit, buffer, sizeof(buffer));
-                    int value = atoi(buffer);
-                    if (value >= 1 && value <= 10000) {
-                        g_app.clickInterval = value;
-                        UpdateStatusDisplay();
-                        EndDialog(hDlg, IDOK);
-                    } else {
-                        MessageBoxA(hDlg, "Please enter a value between 1 and 10000 ms.", "Invalid Input", MB_OK | MB_ICONWARNING);
-                    }
-                    return TRUE;
-                }
-                case IDC_INTERVAL_CANCEL:
-                    EndDialog(hDlg, IDCANCEL);
-                    return TRUE;
-            }
-            break;
-            
-        case WM_CLOSE:
-            EndDialog(hDlg, IDCANCEL);
-            return TRUE;
-    }
-    return FALSE;
-}
-
-void ShowClickIntervalDialog(HWND hwnd) {
-    // Use DialogBox with inline template
-    struct {
-        DLGTEMPLATE dlg;
-        WORD menu;
-        WORD windowClass;
-        WCHAR title[32];
-        WORD fontSize;
-        WCHAR fontName[16];
-    } template_data;
-    
-    memset(&template_data, 0, sizeof(template_data));
-    template_data.dlg.style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_SETFONT | DS_CENTER;
-    template_data.dlg.dwExtendedStyle = 0;
-    template_data.dlg.cdit = 0;
-    template_data.dlg.x = 0;
-    template_data.dlg.y = 0;
-    template_data.dlg.cx = 180;
-    template_data.dlg.cy = 70;
-    template_data.menu = 0;
-    template_data.windowClass = 0;
-    wcscpy(template_data.title, L"Auto-Clicker Interval");
-    template_data.fontSize = 9;
-    wcscpy(template_data.fontName, L"Segoe UI");
-    
-    // Create the dialog window manually
-    HWND hDlg = CreateDialogIndirectParamW(
-        GetModuleHandle(NULL),
-        &template_data.dlg,
-        hwnd,
-        (DLGPROC)IntervalDialogWndProc,
-        0);
-    
-    if (!hDlg) {
-        wchar_t buffer[64];
-        swprintf(buffer, 64, L"Current: %d ms\n\nEnter new interval (1-10000):", g_app.clickInterval);
-        MessageBoxW(hwnd, buffer, L"Auto-Clicker Interval", MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    
-    // Professional modern dialog - spacious layout
-    SetWindowPos(hDlg, HWND_TOPMOST, 0, 0, 620, 350, SWP_NOMOVE);
-    SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(BG_ELEVATED));
-    
-    // Professional typography
-    HFONT hTitleFont = CreateFontW(22, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT hFont = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT hEditFont = CreateFontW(16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    
-    // Modern title
-    HWND hTitle = CreateWindowExW(0, L"STATIC", L"⚡ Auto-Clicker Settings",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 30, 550, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hTitle, WM_SETFONT, (WPARAM)hTitleFont, TRUE);
-    
-    // Clear description with better formatting
-    HWND hLabel = CreateWindowExW(0, L"STATIC", 
-        L"Set the time delay between each automatic click.\n"
-        L"Enter a value between 1 and 10000 milliseconds.",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 85, 550, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    // Professional input field
-    wchar_t currentValue[32];
-    swprintf(currentValue, 32, L"%d", g_app.clickInterval);
-    g_hIntervalEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", currentValue,
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_NUMBER | ES_AUTOHSCROLL | ES_CENTER,
-        35, 130, 550, 52, hDlg, (HMENU)IDC_INTERVAL_EDIT, GetModuleHandle(NULL), NULL);
-    SendMessage(g_hIntervalEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
-    SendMessage(g_hIntervalEdit, EM_SETSEL, 0, -1);
-    
-    // Helpful hint
-    HWND hHint = CreateWindowExW(0, L"STATIC", L"💡 Tip: 100ms = 10 clicks/second, 1000ms = 1 click/second",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 195, 550, 24, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    HFONT hSmallFont = CreateFontW(12, 0, 0, 0, FW_NORMAL, TRUE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    SendMessage(hHint, WM_SETFONT, (WPARAM)hSmallFont, TRUE);
-    
-    // Modern action buttons
-    HWND hOK = CreateWindowExW(0, L"BUTTON", L"✓ Apply",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-        210, 250, 200, 56, hDlg, (HMENU)IDC_INTERVAL_OK, GetModuleHandle(NULL), NULL);
-    SendMessage(hOK, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    HWND hCancel = CreateWindowExW(0, L"BUTTON", L"✕ Cancel",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-        420, 250, 165, 56, hDlg, (HMENU)IDC_INTERVAL_CANCEL, GetModuleHandle(NULL), NULL);
-    SendMessage(hCancel, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    DeleteObject(hSmallFont);
-    DeleteObject(hEditFont);
-    
-    // Center on parent
-    RECT rcDlg, rcParent;
-    GetWindowRect(hDlg, &rcDlg);
-    GetWindowRect(hwnd, &rcParent);
-    int x = rcParent.left + (rcParent.right - rcParent.left - (rcDlg.right - rcDlg.left)) / 2;
-    int y = rcParent.top + (rcParent.bottom - rcParent.top - (rcDlg.bottom - rcDlg.top)) / 2;
-    SetWindowPos(hDlg, HWND_TOP, x, y, 0, 0, SWP_NOSIZE);
-    
-    // Show and activate
-    ShowWindow(hDlg, SW_SHOW);
-    SetFocus(g_hIntervalEdit);
-    
-    // Modal loop
-    EnableWindow(hwnd, FALSE);
-    MSG msg;
-    while (IsWindow(hDlg) && GetMessage(&msg, NULL, 0, 0)) {
-        if (!IsDialogMessage(hDlg, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
-    EnableWindow(hwnd, TRUE);
-    SetFocus(hwnd);
-    
-    DeleteObject(hFont);
-    DeleteObject(hTitleFont);
-}
+// Static IDs used only for muted-text coloring in the hotkey dialog
+#define IDC_HK_SUBTITLE 9001
+#define IDC_HK_INSTRUCTION 9002
 
 // Hotkey dialog callback
 LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case WM_CTLCOLORSTATIC: {
+            static HBRUSH bgB = CreateSolidBrush(BG_PRIMARY);
+            static HBRUSH whiteB = CreateSolidBrush(BG_ELEVATED);
+            HWND ctl = (HWND)lParam;
+            int id = GetDlgCtrlID(ctl);
+            HDC dc = (HDC)wParam;
+            bool isKeyField = (id == IDC_HOTKEY_RECORD || id == IDC_HOTKEY_PLAYBACK ||
+                               id == IDC_HOTKEY_CLICKER || id == IDC_HOTKEY_STOP);
+            if (isKeyField) {                       // read-only key edits → white input
+                SetTextColor(dc, TEXT_PRIMARY);
+                SetBkColor(dc, BG_ELEVATED);
+                return (INT_PTR)whiteB;
+            }
+            bool muted = (id == IDC_HK_SUBTITLE || id == IDC_HK_INSTRUCTION);
+            SetTextColor(dc, muted ? TEXT_SECONDARY : TEXT_PRIMARY);
+            SetBkColor(dc, BG_PRIMARY);
+            return (INT_PTR)bgB;
+        }
+
+        case WM_DRAWITEM: {
+            DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
+            if (dis->CtlID == IDC_HOTKEY_OK)     { DrawDlgButton(dis, L"Save Changes", true);  return TRUE; }
+            if (dis->CtlID == IDC_HOTKEY_CANCEL) { DrawDlgButton(dis, L"Cancel", false);        return TRUE; }
+            break;
+        }
+
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
+                case IDOK:
                 case IDC_HOTKEY_OK: {
                     // Validate hotkeys
-                    if (g_tempHotkeyRecord == 0 || g_tempHotkeyPlayback == 0 || g_tempHotkeyClicker == 0) {
+                    if (g_tempHotkeyRecord == 0 || g_tempHotkeyPlayback == 0 ||
+                        g_tempHotkeyClicker == 0 || g_tempHotkeyStop == 0) {
                         MessageBoxA(hDlg, "Please set all hotkeys!", "Error", MB_OK | MB_ICONERROR);
                         break;
                     }
-                    
+
                     // Check for duplicates
-                    if (g_tempHotkeyRecord == g_tempHotkeyPlayback || 
-                        g_tempHotkeyRecord == g_tempHotkeyClicker ||
-                        g_tempHotkeyPlayback == g_tempHotkeyClicker) {
-                        MessageBoxA(hDlg, "Hotkeys must be unique!", "Error", MB_OK | MB_ICONERROR);
-                        break;
+                    UINT keys[] = {g_tempHotkeyRecord, g_tempHotkeyPlayback,
+                                   g_tempHotkeyClicker, g_tempHotkeyStop};
+                    for (int i = 0; i < 4; ++i) {
+                        for (int j = i + 1; j < 4; ++j) {
+                            if (keys[i] == keys[j]) {
+                                MessageBoxA(hDlg, "Hotkeys must be unique!", "Error", MB_OK | MB_ICONERROR);
+                                return 0;
+                            }
+                        }
                     }
-                    
+
                     // Unregister old hotkeys
                     UnregisterHotkeys();
-                    
+
                     // Apply new hotkeys
                     g_app.hotkeyRecord = g_tempHotkeyRecord;
                     g_app.hotkeyPlayback = g_tempHotkeyPlayback;
                     g_app.hotkeyClicker = g_tempHotkeyClicker;
-                    
+                    g_app.hotkeyStop = g_tempHotkeyStop;
+
                     // Register new hotkeys
                     RegisterHotkeys();
-                    
+
                     DestroyWindow(hDlg);
                     break;
                 }
+                case IDCANCEL:
                 case IDC_HOTKEY_CANCEL:
                     DestroyWindow(hDlg);
                     break;
             }
             break;
-            
+
         case WM_CLOSE:
             DestroyWindow(hDlg);
             break;
-            
+
         case WM_DESTROY:
             g_hHotkeyRecordEdit = NULL;
             g_hHotkeyPlaybackEdit = NULL;
             g_hHotkeyClickerEdit = NULL;
-            PostQuitMessage(0);
+            g_hHotkeyStopEdit = NULL;
             break;
     }
     return 0;
 }
 
 LRESULT CALLBACK HotkeyEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    (void)uIdSubclass;
+    (void)dwRefData;
     if (msg == WM_KEYDOWN) {
         UINT vk = (UINT)wParam;
         
@@ -1050,8 +832,10 @@ LRESULT CALLBACK HotkeyEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 g_tempHotkeyPlayback = vk;
             } else if (hwnd == g_hHotkeyClickerEdit) {
                 g_tempHotkeyClicker = vk;
+            } else if (hwnd == g_hHotkeyStopEdit) {
+                g_tempHotkeyStop = vk;
             }
-            
+
             // Display the key name (with modifiers for playback)
             bool showModifiers = (hwnd == g_hHotkeyPlaybackEdit);
             SetWindowTextA(hwnd, GetKeyName(vk, showModifiers));
@@ -1103,137 +887,78 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
         MessageBoxW(hwnd, L"Failed to create hotkey dialog", L"Error", MB_OK | MB_ICONERROR);
         return;
     }
-    
-    // Professional modern dialog - card-style layout
-    SetWindowPos(hDlg, HWND_TOPMOST, 0, 0, 680, 560, SWP_NOMOVE);
-    SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(BG_ELEVATED));
-    
-    // Professional typography system
-    HFONT hTitleFont = CreateFontW(22, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT hFont = CreateFontW(14, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT hEditFont = CreateFontW(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    
-    // Modern title
-    HWND hTitle = CreateWindowExW(0, L"STATIC", L"⌨ Customize Hotkeys",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 30, 610, 40, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hTitle, WM_SETFONT, (WPARAM)hTitleFont, TRUE);
-    
-    // Subtitle explaining purpose
-    HWND hSubtitle = CreateWindowExW(0, L"STATIC", 
-        L"Assign keyboard shortcuts for quick access to FLOW functions.",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 72, 610, 24, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    HFONT hSubFont = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    SendMessage(hSubtitle, WM_SETFONT, (WPARAM)hSubFont, TRUE);
-    
-    // Recording hotkey - modern card style
-    HWND hLabel1 = CreateWindowExW(0, L"STATIC", L"● Start/Stop Recording",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 115, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel1, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    const char* keyName1 = GetKeyName(g_app.hotkeyRecord, false);
-    wchar_t wKeyName1[64];
-    MultiByteToWideChar(CP_ACP, 0, keyName1, -1, wKeyName1, 64);
-    g_hHotkeyRecordEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wKeyName1,
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_CENTER,
-        220, 110, 425, 48, hDlg, (HMENU)IDC_HOTKEY_RECORD, GetModuleHandle(NULL), NULL);
-    SendMessage(g_hHotkeyRecordEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
-    SetWindowSubclass(g_hHotkeyRecordEdit, HotkeyEditProc, 0, 0);
-    
-    // Playback hotkey
-    HWND hLabel2 = CreateWindowExW(0, L"STATIC", L"▶ Start/Stop Playback",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 185, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel2, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    const char* keyName2 = GetKeyName(g_app.hotkeyPlayback, true);
-    wchar_t wKeyName2[64];
-    MultiByteToWideChar(CP_ACP, 0, keyName2, -1, wKeyName2, 64);
-    g_hHotkeyPlaybackEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wKeyName2,
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_CENTER,
-        220, 180, 425, 48, hDlg, (HMENU)IDC_HOTKEY_PLAYBACK, GetModuleHandle(NULL), NULL);
-    SendMessage(g_hHotkeyPlaybackEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
-    SetWindowSubclass(g_hHotkeyPlaybackEdit, HotkeyEditProc, 0, 0);
-    
-    // Auto-Clicker hotkey
-    HWND hLabel3 = CreateWindowExW(0, L"STATIC", L"⚡ Toggle Auto-Clicker",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 255, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel3, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    const char* keyName3 = GetKeyName(g_app.hotkeyClicker, false);
-    wchar_t wKeyName3[64];
-    MultiByteToWideChar(CP_ACP, 0, keyName3, -1, wKeyName3, 64);
-    g_hHotkeyClickerEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wKeyName3,
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_CENTER,
-        220, 250, 425, 48, hDlg, (HMENU)IDC_HOTKEY_CLICKER, GetModuleHandle(NULL), NULL);
-    SendMessage(g_hHotkeyClickerEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
-    SetWindowSubclass(g_hHotkeyClickerEdit, HotkeyEditProc, 0, 0);
-    
-    // Stop All hotkey
-    HWND hLabel4 = CreateWindowExW(0, L"STATIC", L"■ Stop All Activities",
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        35, 325, 180, 28, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel4, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    const char* keyName4 = GetKeyName(g_app.hotkeyStop, false);
-    wchar_t wKeyName4[64];
-    MultiByteToWideChar(CP_ACP, 0, keyName4, -1, wKeyName4, 64);
-    g_hHotkeyStopEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wKeyName4,
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_CENTER,
-        220, 320, 425, 48, hDlg, (HMENU)IDC_HOTKEY_STOP, GetModuleHandle(NULL), NULL);
-    SendMessage(g_hHotkeyStopEdit, WM_SETFONT, (WPARAM)hEditFont, TRUE);
-    SetWindowSubclass(g_hHotkeyStopEdit, HotkeyEditProc, 0, 0);
-    
-    // Helpful instructions at bottom
-    HFONT hSmallFont = CreateFontW(13, 0, 0, 0, FW_NORMAL, TRUE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HWND hInstr = CreateWindowExW(0, L"STATIC", 
-        L"💡 Click any field above, then press your desired key combination\n"
-        L"Supported keys: F1-F12, A-Z, 0-9, and modifier combinations",
-        WS_CHILD | WS_VISIBLE | SS_CENTER,
-        35, 405, 610, 38, hDlg, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hInstr, WM_SETFONT, (WPARAM)hSmallFont, TRUE);
-    
-    // Modern action buttons with proper spacing
-    HWND hOK = CreateWindowExW(0, L"BUTTON", L"✓ Save Changes",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-        230, 470, 200, 58, hDlg, (HMENU)IDC_HOTKEY_OK, GetModuleHandle(NULL), NULL);
-    SendMessage(hOK, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    HWND hCancel = CreateWindowExW(0, L"BUTTON", L"✕ Cancel",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-        440, 470, 165, 58, hDlg, (HMENU)IDC_HOTKEY_CANCEL, GetModuleHandle(NULL), NULL);
-    SendMessage(hCancel, WM_SETFONT, (WPARAM)hFont, TRUE);
-    
-    DeleteObject(hSmallFont);
-    DeleteObject(hSubFont);
-    DeleteObject(hEditFont);
-    
+
+    HINSTANCE hi = GetModuleHandle(NULL);
+    SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(BG_PRIMARY));
+
+    // Layout in design units (scaled via Sc).
+    const int W = 480, H = 452, padX = 28;
+    const int rowTop = 104, rowH = 56, labelW = 168, editX = 200, editW = W - editX - padX, editH = 40;
+
+    HWND title = CreateWindowExW(0, L"STATIC", L"Customize Hotkeys",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(20), Sc(W - 2 * padX), Sc(40),
+        hDlg, NULL, hi, NULL);
+    SendMessageW(title, WM_SETFONT, (WPARAM)g_fonts.wordmark, TRUE);
+
+    HWND sub = CreateWindowExW(0, L"STATIC",
+        L"Click a field, then press your key.  F1–F12, A–Z, 0–9.",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(66), Sc(W - 2 * padX), Sc(24),
+        hDlg, (HMENU)IDC_HK_SUBTITLE, hi, NULL);
+    SendMessageW(sub, WM_SETFONT, (WPARAM)g_fonts.small_, TRUE);
+
+    auto makeRow = [&](const wchar_t* text, UINT vk, bool mods, int editId, int y) -> HWND {
+        HWND lab = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT,
+            Sc(padX), Sc(y + 11), Sc(labelW), Sc(24), hDlg, NULL, hi, NULL);
+        SendMessageW(lab, WM_SETFONT, (WPARAM)g_fonts.body, TRUE);
+        const char* kn = GetKeyName(vk, mods);
+        wchar_t wkn[64]; MultiByteToWideChar(CP_ACP, 0, kn, -1, wkn, 64);
+        HWND e = CreateWindowExW(0, L"EDIT", wkn,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_READONLY | ES_CENTER,
+            Sc(editX), Sc(y), Sc(editW), Sc(editH), hDlg, (HMENU)(LONG_PTR)editId, hi, NULL);
+        SendMessageW(e, WM_SETFONT, (WPARAM)g_fonts.value, TRUE);
+        SetWindowSubclass(e, HotkeyEditProc, 0, 0);
+        return e;
+    };
+
+    g_hHotkeyRecordEdit   = makeRow(L"Start / stop recording", g_app.hotkeyRecord, false, IDC_HOTKEY_RECORD,   rowTop);
+    g_hHotkeyPlaybackEdit = makeRow(L"Start / stop playback",  g_app.hotkeyPlayback, true, IDC_HOTKEY_PLAYBACK, rowTop + rowH);
+    g_hHotkeyClickerEdit  = makeRow(L"Toggle auto-clicker",    g_app.hotkeyClicker, false, IDC_HOTKEY_CLICKER,  rowTop + 2 * rowH);
+    g_hHotkeyStopEdit     = makeRow(L"Stop all activities",    g_app.hotkeyStop, false, IDC_HOTKEY_STOP,        rowTop + 3 * rowH);
+
+    HWND instr = CreateWindowExW(0, L"STATIC",
+        L"Playback also requires Ctrl+Shift+Alt. Changes apply on save.",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(rowTop + 4 * rowH + 6), Sc(W - 2 * padX), Sc(24),
+        hDlg, (HMENU)IDC_HK_INSTRUCTION, hi, NULL);
+    SendMessageW(instr, WM_SETFONT, (WPARAM)g_fonts.small_, TRUE);
+
+    const int btnY = 384, btnH = 44;
+    HWND ok = CreateWindowExW(0, L"BUTTON", L"",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW | BS_DEFPUSHBUTTON,
+        Sc(W - padX - 270), Sc(btnY), Sc(150), Sc(btnH), hDlg, (HMENU)IDC_HOTKEY_OK, hi, NULL);
+    HWND cancel = CreateWindowExW(0, L"BUTTON", L"",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+        Sc(W - padX - 110), Sc(btnY), Sc(110), Sc(btnH), hDlg, (HMENU)IDC_HOTKEY_CANCEL, hi, NULL);
+    (void)ok; (void)cancel;
+
+    // Size the client area to exactly Sc(W) x Sc(H)
+    SetWindowPos(hDlg, NULL, 0, 0, Sc(W), Sc(H), SWP_NOMOVE | SWP_NOZORDER);
+    RECT rcC; GetClientRect(hDlg, &rcC);
+    RECT rcW; GetWindowRect(hDlg, &rcW);
+    SetWindowPos(hDlg, NULL, 0, 0,
+        (rcW.right - rcW.left) + (Sc(W) - rcC.right),
+        (rcW.bottom - rcW.top) + (Sc(H) - rcC.bottom),
+        SWP_NOMOVE | SWP_NOZORDER);
+
     // Center on parent
-    RECT rcDlg, rcParent;
-    GetWindowRect(hDlg, &rcDlg);
-    GetWindowRect(hwnd, &rcParent);
-    int x = rcParent.left + (rcParent.right - rcParent.left - (rcDlg.right - rcDlg.left)) / 2;
-    int y = rcParent.top + (rcParent.bottom - rcParent.top - (rcDlg.bottom - rcDlg.top)) / 2;
+    GetWindowRect(hDlg, &rcW);
+    RECT rcParent; GetWindowRect(hwnd, &rcParent);
+    int x = rcParent.left + (rcParent.right - rcParent.left - (rcW.right - rcW.left)) / 2;
+    int y = rcParent.top + (rcParent.bottom - rcParent.top - (rcW.bottom - rcW.top)) / 2;
     SetWindowPos(hDlg, HWND_TOP, x, y, 0, 0, SWP_NOSIZE);
-    
-    // Show and activate
+
     ShowWindow(hDlg, SW_SHOW);
     SetFocus(g_hHotkeyRecordEdit);
-    
-    // Modal loop
+
     EnableWindow(hwnd, FALSE);
     MSG msg;
     while (IsWindow(hDlg) && GetMessage(&msg, NULL, 0, 0)) {
@@ -1244,228 +969,363 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     }
     EnableWindow(hwnd, TRUE);
     SetFocus(hwnd);
-    
-    DeleteObject(hSmallFont);
-    DeleteObject(hFont);
-    DeleteObject(hTitleFont);
 }
+
+// ============================================================================
+// ABOUT DIALOG
+// ============================================================================
+
+#define IDC_ABOUT_OK   9100
+#define IDC_ABOUT_SUB  9101
+#define IDC_ABOUT_BODY 9102
+
+LRESULT CALLBACK AboutDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_CTLCOLORSTATIC: {
+            static HBRUSH bgB = CreateSolidBrush(BG_PRIMARY);
+            int id = GetDlgCtrlID((HWND)lParam);
+            HDC dc = (HDC)wParam;
+            bool muted = (id == IDC_ABOUT_SUB || id == IDC_ABOUT_BODY);
+            SetTextColor(dc, muted ? TEXT_SECONDARY : TEXT_PRIMARY);
+            SetBkColor(dc, BG_PRIMARY);
+            return (INT_PTR)bgB;
+        }
+        case WM_DRAWITEM: {
+            DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
+            if (dis->CtlID == IDC_ABOUT_OK) { DrawDlgButton(dis, L"Got it", true); return TRUE; }
+            break;
+        }
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDOK:
+                case IDCANCEL:
+                case IDC_ABOUT_OK:
+                    DestroyWindow(hDlg);
+                    break;
+            }
+            break;
+        case WM_CLOSE:
+            DestroyWindow(hDlg);
+            break;
+    }
+    return 0;
+}
+
+void ShowAboutDialog(HWND hwnd) {
+    struct {
+        DLGTEMPLATE dlg; WORD menu; WORD windowClass; WCHAR title[16];
+        WORD fontSize; WCHAR fontName[16];
+    } td;
+    memset(&td, 0, sizeof(td));
+    td.dlg.style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_SETFONT | DS_CENTER;
+    td.dlg.cx = 200; td.dlg.cy = 140;
+    wcscpy(td.title, L"About FLOW");
+    td.fontSize = 9; wcscpy(td.fontName, L"Segoe UI");
+
+    HWND hDlg = CreateDialogIndirectParamW(GetModuleHandle(NULL), &td.dlg, hwnd,
+        (DLGPROC)AboutDialogWndProc, 0);
+    if (!hDlg) return;
+
+    HINSTANCE hi = GetModuleHandle(NULL);
+    SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(BG_PRIMARY));
+
+    const int W = 440, H = 372, padX = 28;
+
+    HWND title = CreateWindowExW(0, L"STATIC", L"FLOW", WS_CHILD | WS_VISIBLE | SS_LEFT,
+        Sc(padX), Sc(22), Sc(W - 2 * padX), Sc(40), hDlg, NULL, hi, NULL);
+    SendMessageW(title, WM_SETFONT, (WPARAM)g_fonts.wordmark, TRUE);
+
+    HWND sub = CreateWindowExW(0, L"STATIC", L"Flexible Low-latency Operations Workflow",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(64), Sc(W - 2 * padX), Sc(22),
+        hDlg, (HMENU)IDC_ABOUT_SUB, hi, NULL);
+    SendMessageW(sub, WM_SETFONT, (WPARAM)g_fonts.small_, TRUE);
+
+    HWND body = CreateWindowExW(0, L"STATIC",
+        L"A macro recorder, player, and high-speed auto-clicker.\r\n\r\n"
+        L"Default hotkeys\r\n"
+        L"F8  —  Start / stop recording\r\n"
+        L"Ctrl+Shift+Alt+P  —  Start / stop playback\r\n"
+        L"F6  —  Toggle auto-clicker\r\n"
+        L"Pause  —  Stop everything\r\n\r\n"
+        L"Settings are saved between sessions.",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(100), Sc(W - 2 * padX), Sc(180),
+        hDlg, (HMENU)IDC_ABOUT_BODY, hi, NULL);
+    SendMessageW(body, WM_SETFONT, (WPARAM)g_fonts.body, TRUE);
+
+    HWND ok = CreateWindowExW(0, L"BUTTON", L"",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW | BS_DEFPUSHBUTTON,
+        Sc(W - padX - 120), Sc(300), Sc(120), Sc(44), hDlg, (HMENU)IDC_ABOUT_OK, hi, NULL);
+    (void)ok;
+
+    SetWindowPos(hDlg, NULL, 0, 0, Sc(W), Sc(H), SWP_NOMOVE | SWP_NOZORDER);
+    RECT rcC; GetClientRect(hDlg, &rcC);
+    RECT rcW; GetWindowRect(hDlg, &rcW);
+    SetWindowPos(hDlg, NULL, 0, 0,
+        (rcW.right - rcW.left) + (Sc(W) - rcC.right),
+        (rcW.bottom - rcW.top) + (Sc(H) - rcC.bottom),
+        SWP_NOMOVE | SWP_NOZORDER);
+
+    GetWindowRect(hDlg, &rcW);
+    RECT rcParent; GetWindowRect(hwnd, &rcParent);
+    int x = rcParent.left + (rcParent.right - rcParent.left - (rcW.right - rcW.left)) / 2;
+    int y = rcParent.top + (rcParent.bottom - rcParent.top - (rcW.bottom - rcW.top)) / 2;
+    SetWindowPos(hDlg, HWND_TOP, x, y, 0, 0, SWP_NOSIZE);
+
+    ShowWindow(hDlg, SW_SHOW);
+
+    EnableWindow(hwnd, FALSE);
+    MSG msg;
+    while (IsWindow(hDlg) && GetMessage(&msg, NULL, 0, 0)) {
+        if (!IsDialogMessage(hDlg, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+    EnableWindow(hwnd, TRUE);
+    SetFocus(hwnd);
+}
+
 
 // ============================================================================
 // WINDOW PROCEDURE
 // ============================================================================
 
+static void TextLine(HDC hdc, const wchar_t* s, int x, int y, HFONT font, COLORREF color) {
+    HFONT old = (HFONT)SelectObject(hdc, font);
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, color);
+    TextOutW(hdc, x, y, s, (int)wcslen(s));
+    SelectObject(hdc, old);
+}
+
+static void ApplySpeedEdit(HWND hwnd) {
+    wchar_t buf[32];
+    GetDlgItemTextW(hwnd, EDIT_SPEED, buf, 32);
+    double v = wcstod(buf, nullptr);
+    if (v < 0.1) v = 0.1;
+    if (v > 100.0) v = 100.0;
+    SetPlaybackSpeed((float)v);
+    wchar_t out[32];
+    swprintf(out, 32, L"%g", v);
+    SetDlgItemTextW(hwnd, EDIT_SPEED, out);
+}
+
+static void ApplyLoopsEdit(HWND hwnd) {
+    wchar_t buf[32];
+    GetDlgItemTextW(hwnd, EDIT_LOOPS, buf, 32);
+    int v = (int)wcstol(buf, nullptr, 10);
+    if (v < 1) v = 1;
+    if (v > 999) v = 999;
+    g_app.loopCount = v;
+    wchar_t out[16];
+    swprintf(out, 16, L"%d", v);
+    SetDlgItemTextW(hwnd, EDIT_LOOPS, out);
+    UpdateStatusDisplay();
+}
+
+static void ApplyIntervalEdit(HWND hwnd) {
+    wchar_t buf[32];
+    GetDlgItemTextW(hwnd, EDIT_INTERVAL, buf, 32);
+    int v = (int)wcstol(buf, nullptr, 10);
+    if (v < 1) v = 1;
+    if (v > 10000) v = 10000;
+    g_app.clickInterval = v;
+    if (g_app.engine && g_app.isClicking) g_app.engine->SetClickInterval(v);
+    wchar_t out[16];
+    swprintf(out, 16, L"%d", v);
+    SetDlgItemTextW(hwnd, EDIT_INTERVAL, out);
+    UpdateStatusDisplay();
+}
+
+// Render the whole window (header + cards + labels) into a device context.
+static void PaintUI(HDC hdc, RECT client) {
+    HBRUSH bg = CreateSolidBrush(BG_PRIMARY);
+    FillRect(hdc, &client, bg);
+    DeleteObject(bg);
+
+    const wchar_t* stTxt; COLORREF stCol;
+    if (g_app.isRecording)     { stTxt = L"Recording"; stCol = DANGER_COLOR; }
+    else if (g_app.isPlaying)  { stTxt = L"Playing";   stCol = SUCCESS_COLOR; }
+    else if (g_app.isClicking) { stTxt = L"Clicking";  stCol = ACCENT_PRIMARY; }
+    else                       { stTxt = L"Ready";     stCol = TEXT_SECONDARY; }
+
+    HFONT oldf = (HFONT)SelectObject(hdc, g_fonts.pill);
+    SIZE pillTs; GetTextExtentPoint32W(hdc, stTxt, (int)wcslen(stTxt), &pillTs);
+    SelectObject(hdc, oldf);
+    int pillPadL = Sc(14), pillDot = Sc(8), pillGap = Sc(8), pillPadR = Sc(16), pillH = Sc(28);
+    int pillW = pillPadL + pillDot + pillGap + pillTs.cx + pillPadR;
+    int pillX = Sc(CLIENT_W) - Sc(PAD) - pillW;
+    int pillY = (Sc(HEADER_H) - pillH) / 2 + Sc(2);
+
+    {
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        Gdiplus::Pen divider(GP(BORDER_DEFAULT));
+        g.DrawLine(&divider, (float)Sc(PAD), (float)Sc(HEADER_H), (float)(Sc(CLIENT_W) - Sc(PAD)), (float)Sc(HEADER_H));
+        DrawCard(g, Sc(LEFT_X),  Sc(REC_TOP), Sc(COL_W), Sc(REC_H));
+        DrawCard(g, Sc(LEFT_X),  Sc(CLK_TOP), Sc(COL_W), Sc(CLK_H));
+        DrawCard(g, Sc(RIGHT_X), Sc(REC_TOP), Sc(COL_W), Sc(PLAY_H));
+        FillRound(g, (float)pillX, (float)pillY, (float)pillW, (float)pillH, pillH / 2.0f, GP(stCol, 30));
+        IconCircle(g, pillX + pillPadL + pillDot / 2.0f, pillY + pillH / 2.0f, pillDot / 2.0f, GP(stCol));
+    }
+
+    int ix = Sc(LEFT_X + 18);
+    int pix = Sc(RIGHT_X + 18);
+
+    TextLine(hdc, L"FLOW", Sc(PAD), Sc(9), g_fonts.wordmark, TEXT_PRIMARY);
+    TextLine(hdc, L"Macro recorder & auto-clicker", Sc(PAD), Sc(39), g_fonts.small_, TEXT_SECONDARY);
+
+    {
+        RECT tr = { pillX + pillPadL + pillDot + pillGap, pillY, pillX + pillW, pillY + pillH };
+        HFONT o = (HFONT)SelectObject(hdc, g_fonts.pill);
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, stCol);
+        DrawTextW(hdc, stTxt, -1, &tr, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+        SelectObject(hdc, o);
+    }
+
+    TextLine(hdc, L"RECORD",       ix,  Sc(REC_TOP + 14), g_fonts.cardTitle, TEXT_FAINT);
+    TextLine(hdc, L"AUTO-CLICKER", ix,  Sc(CLK_TOP + 14), g_fonts.cardTitle, TEXT_FAINT);
+    TextLine(hdc, L"PLAYBACK",     pix, Sc(REC_TOP + 14), g_fonts.cardTitle, TEXT_FAINT);
+
+    {
+        wchar_t cap[64];
+        unsigned long n = g_app.engine ? (unsigned long)g_app.engine->GetEventCount() : 0UL;
+        if (n > 0) swprintf(cap, 64, L"%lu events captured", n);
+        else       wcscpy(cap, L"No recording yet");
+        TextLine(hdc, cap, ix, Sc(REC_TOP + REC_H - 30), g_fonts.small_, TEXT_SECONDARY);
+    }
+
+    TextLine(hdc, L"Interval (ms)", ix, Sc(CLK_TOP + 84), g_fonts.body, TEXT_SECONDARY);
+    {
+        wchar_t cps[48];
+        int per = g_app.clickInterval > 0 ? g_app.clickInterval : 1;
+        swprintf(cps, 48, L"≈ %d clicks/sec", (1000 + per / 2) / per);
+        TextLine(hdc, cps, ix + Sc(110), Sc(CLK_TOP + 111), g_fonts.small_, TEXT_FAINT);
+    }
+
+    TextLine(hdc, L"Speed", pix, Sc(REC_TOP + 88),  g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"×", pix + Sc(100), Sc(REC_TOP + 112), g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"Loops", pix, Sc(REC_TOP + 150), g_fonts.body, TEXT_SECONDARY);
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case WM_ERASEBKGND:
+            return 1;  // background painted in WM_PAINT
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            RECT rc; GetClientRect(hwnd, &rc);
+            HDC mem = CreateCompatibleDC(hdc);
+            HBITMAP bmp = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+            HBITMAP oldBmp = (HBITMAP)SelectObject(mem, bmp);
+            PaintUI(mem, rc);
+            BitBlt(hdc, 0, 0, rc.right, rc.bottom, mem, 0, 0, SRCCOPY);
+            SelectObject(mem, oldBmp);
+            DeleteObject(bmp);
+            DeleteDC(mem);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        case WM_CTLCOLOREDIT:
+        case WM_CTLCOLORSTATIC: {
+            static HBRUSH white = CreateSolidBrush(BG_ELEVATED);
+            HDC dc = (HDC)wParam;
+            SetTextColor(dc, TEXT_PRIMARY);
+            SetBkColor(dc, BG_ELEVATED);
+            return (INT_PTR)white;
+        }
+
         case WM_COMMAND: {
             int id = LOWORD(wParam);
-            
+            int code = HIWORD(wParam);
+
+            if (code == EN_KILLFOCUS) {
+                if (id == EDIT_SPEED) ApplySpeedEdit(hwnd);
+                else if (id == EDIT_LOOPS) ApplyLoopsEdit(hwnd);
+                else if (id == EDIT_INTERVAL) ApplyIntervalEdit(hwnd);
+                break;
+            }
+
             switch (id) {
-                case BTN_OPEN:
-                    OpenMacroFile(hwnd);
-                    break;
-                case BTN_SAVE:
-                    SaveMacroFile(hwnd);
-                    break;
-                case BTN_RECORD:
-                    ToggleRecording(hwnd);
-                    break;
-                case BTN_PLAY:
-                    TogglePlayback(hwnd);
-                    break;
-                case BTN_STOP_ALL:
-                    StopAll(hwnd);
-                    break;
-                case BTN_SETTINGS:
-                    ShowSettingsMenu(hwnd);
-                    break;
-                case BTN_TOGGLE_CLICKER:
-                    ToggleAutoClicker();
-                    break;
-                    
-                case MENU_SPEED_HALF:
-                    g_app.playbackSpeed = 0.5f;
+                case BTN_OPEN: OpenMacroFile(hwnd); break;
+                case BTN_SAVE: SaveMacroFile(hwnd); break;
+                case BTN_RECORD: ToggleRecording(hwnd); break;
+                case BTN_PLAY: TogglePlayback(hwnd); break;
+                case BTN_STOP_ALL: StopAll(hwnd); break;
+                case BTN_SETTINGS: ShowSettingsMenu(hwnd); break;
+                case BTN_TOGGLE_CLICKER: ToggleAutoClicker(); break;
+
+                case CHK_CONTINUOUS:
+                    g_app.continuous =
+                        (SendDlgItemMessageW(hwnd, CHK_CONTINUOUS, BM_GETCHECK, 0, 0) == BST_CHECKED);
                     UpdateStatusDisplay();
                     break;
-                case MENU_SPEED_1X:
-                    g_app.playbackSpeed = 1.0f;
-                    UpdateStatusDisplay();
-                    break;
-                case MENU_SPEED_2X:
-                    g_app.playbackSpeed = 2.0f;
-                    UpdateStatusDisplay();
-                    break;
-                case MENU_SPEED_100X:
-                    g_app.playbackSpeed = 100.0f;
-                    UpdateStatusDisplay();
-                    break;
-                case MENU_SPEED_CUSTOM:
-                    ShowCustomSpeedDialog(hwnd);
-                    break;
-                case MENU_CONTINUOUS:
-                    g_app.continuous = !g_app.continuous;
-                    UpdateStatusDisplay();
-                    break;
-                case MENU_SET_LOOPS:
-                    ShowLoopCountDialog(hwnd);
-                    break;
-                case MENU_CLICK_INTERVAL:
-                    ShowClickIntervalDialog(hwnd);
-                    break;
-                case MENU_HUMANIZATION:
-                    g_app.humanizationEnabled = !g_app.humanizationEnabled;
-                    g_app.engine->EnableHumanization(g_app.humanizationEnabled);
-                    if (g_app.humanizationEnabled) {
-                        g_app.engine->ConfigureHumanization(0.0, g_app.humanizationStdDev);
+
+                case CHK_HUMANIZE:
+                    g_app.humanizationEnabled =
+                        (SendDlgItemMessageW(hwnd, CHK_HUMANIZE, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                    if (g_app.engine) {
+                        g_app.engine->EnableHumanization(g_app.humanizationEnabled);
+                        if (g_app.humanizationEnabled)
+                            g_app.engine->ConfigureHumanization(0.0, g_app.humanizationStdDev);
                     }
                     break;
-                case MENU_CLEAR_RECORDING:
-                    g_app.engine->ClearRecording();
-                    MessageBoxA(hwnd, "Recording cleared!", "Info", MB_OK | MB_ICONINFORMATION);
-                    break;
-                case MENU_CUSTOMIZE_HOTKEYS:
-                    ShowCustomizeHotkeysDialog(hwnd);
-                    break;
+
+                case MENU_CUSTOMIZE_HOTKEYS: ShowCustomizeHotkeysDialog(hwnd); break;
                 case MENU_ALWAYS_ON_TOP:
                     g_app.alwaysOnTop = !g_app.alwaysOnTop;
                     UpdateWindowState();
                     break;
+                case MENU_CLEAR_RECORDING:
+                    if (g_app.engine) g_app.engine->ClearRecording();
+                    UpdateStatusDisplay();
+                    break;
                 case MENU_ABOUT:
-                    MessageBoxW(hwnd, 
-                        L"FLOW\n\n"
-                        L"Flexible Low-latency Operations Workflow\n\n"
-                        L"A powerful macro automation tool\n\n"
-                        L"Default Hotkeys:\n\n"
-                        L"\u25cf  F8 - Start/Stop Recording\n"
-                        L"\u25b6  Ctrl+Shift+Alt+P - Start/Stop Playback\n"
-                        L"\u26a1  F6 - Toggle Auto-Clicker\n"
-                        L"\u25a0  Pause - Stop All Activities\n\n"
-                        L"Customize hotkeys via Settings menu", 
-                        L"About FLOW", MB_OK | MB_ICONINFORMATION);
+                    ShowAboutDialog(hwnd);
                     break;
             }
             break;
         }
-        
+
         case WM_DRAWITEM: {
             DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
             if (dis->CtlType == ODT_BUTTON) {
-                HDC hdc = dis->hDC;
-                RECT rect = dis->rcItem;
-                
-                // Anti-aliasing mode
-                SetBkMode(hdc, TRANSPARENT);
-                
-                // Get button state
-                bool isPressed = (dis->itemState & ODS_SELECTED);
-                bool isHot = (dis->itemState & ODS_HOTLIGHT);
-                
-                // Determine if button is active
-                bool isActive = false;
-                COLORREF baseColor = ACCENT_PRIMARY;
-                
-                if (dis->CtlID == BTN_RECORD) {
-                    isActive = g_app.isRecording;
-                    baseColor = DANGER_COLOR;
-                } else if (dis->CtlID == BTN_PLAY) {
-                    isActive = g_app.isPlaying;
-                    baseColor = SUCCESS_COLOR;
-                } else if (dis->CtlID == BTN_STOP_ALL) {
-                    isActive = (g_app.isRecording || g_app.isPlaying || g_app.isClicking);
-                    baseColor = DANGER_COLOR;
-                }
-                
-                // Modern button colors
-                COLORREF bgColor, iconColor;
-                if (isActive) {
-                    // Active state - filled with color
-                    bgColor = baseColor;
-                    iconColor = RGB(255, 255, 255);
-                } else if (isPressed) {
-                    // Pressed - darker
-                    bgColor = RGB(226, 232, 240);
-                    iconColor = TEXT_PRIMARY;
-                } else if (isHot) {
-                    // Hover - light elevation
-                    bgColor = RGB(241, 245, 249);
-                    iconColor = baseColor;
-                } else {
-                    // Default - white with subtle border
-                    bgColor = BG_ELEVATED;
-                    iconColor = TEXT_SECONDARY;
-                }
-                
-                // Draw modern rounded button
-                DrawRoundedRect(hdc, rect, CORNER_RADIUS, bgColor, BORDER_DEFAULT, 1);
-                
-                // Draw subtle shadow when not pressed
-                if (!isPressed && isHot) {
-                    RECT shadowRect = {rect.left + 2, rect.top + 2, rect.right + 2, rect.bottom + 2};
-                    HBRUSH shadowBrush = CreateSolidBrush(RGB(226, 232, 240));
-                    HRGN shadowRgn = CreateRoundRectRgn(shadowRect.left, shadowRect.top, 
-                                                        shadowRect.right, shadowRect.bottom, 
-                                                        CORNER_RADIUS, CORNER_RADIUS);
-                    HRGN buttonRgn = CreateRoundRectRgn(rect.left, rect.top, rect.right, rect.bottom,
-                                                        CORNER_RADIUS, CORNER_RADIUS);
-                    CombineRgn(shadowRgn, shadowRgn, buttonRgn, RGN_DIFF);
-                    FillRgn(hdc, shadowRgn, shadowBrush);
-                    DeleteObject(shadowBrush);
-                    DeleteObject(shadowRgn);
-                    DeleteObject(buttonRgn);
-                }
-                
-                // Draw icon
-                void (*drawFunc)(HDC, int, int, int, COLORREF) = 
-                    (void (*)(HDC, int, int, int, COLORREF))GetWindowLongPtrW(dis->hwndItem, GWLP_USERDATA);
-                
-                if (drawFunc) {
-                    drawFunc(hdc, rect.left, rect.top, BUTTON_SIZE, iconColor);
-                }
+                DrawFlowButton(dis);
+                return TRUE;
             }
-            return TRUE;
+            break;
         }
-        
-        case WM_TIMER: {
+
+        case WM_TIMER:
             if (wParam == TIMER_STATUS_CHECK) {
-                // Check if playback has finished
-                if (g_app.isPlaying && !g_app.engine->IsPlaybackActive()) {
+                if (g_app.isPlaying && g_app.engine && !g_app.engine->IsPlaybackActive()) {
                     g_app.isPlaying = false;
-                    SetWindowTextA(hwnd, "FLOW");
                     UpdateStatusDisplay();
-                    InvalidateRect(hwnd, NULL, TRUE);
                 }
             }
             break;
-        }
-        
-        case WM_HOTKEY: {
-            if (wParam == HOTKEY_RECORD) {
-                ToggleRecording(hwnd);
-            } else if (wParam == HOTKEY_PLAYBACK) {
-                TogglePlayback(hwnd);
-            } else if (wParam == HOTKEY_CLICKER) {
-                ToggleAutoClicker();
-            } else if (wParam == HOTKEY_STOP) {
-                StopAll(hwnd);
-            }
+
+        case WM_HOTKEY:
+            if (wParam == HOTKEY_RECORD) ToggleRecording(hwnd);
+            else if (wParam == HOTKEY_PLAYBACK) TogglePlayback(hwnd);
+            else if (wParam == HOTKEY_CLICKER) ToggleAutoClicker();
+            else if (wParam == HOTKEY_STOP) StopAll(hwnd);
             break;
-        }
-        
+
         case WM_CLOSE:
             DestroyWindow(hwnd);
             break;
-            
-        case WM_CTLCOLORSTATIC: {
-            HDC hdcStatic = (HDC)wParam;
-            SetTextColor(hdcStatic, TEXT_PRIMARY);
-            SetBkColor(hdcStatic, BG_PRIMARY);
-            return (INT_PTR)CreateSolidBrush(BG_PRIMARY);
-        }
-        
+
         case WM_DESTROY:
+            SaveSettings();
             KillTimer(hwnd, TIMER_STATUS_CHECK);
             PostQuitMessage(0);
             break;
-            
+
         default:
             return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
@@ -1477,83 +1337,53 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 // ============================================================================
 
 void CreateControls(HWND hwnd) {
-    int x = MARGIN;
-    int y = MARGIN;
-    
-    // Font for button labels
-    HFONT hLabelFont = CreateFontW(11, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    
-    // Create modern toolbar buttons with labels underneath
-    const wchar_t* labels[] = {L"Open", L"Save", L"Record", L"Play", L"Stop All", L"Settings"};
-    int labelY = y + BUTTON_SIZE + 4;
-    
-    CreateModernButton(hwnd, x, y, BTN_OPEN, DrawModernFolderIcon, ACCENT_PRIMARY, L"📁 Open Recording");
-    HWND hLabel1 = CreateWindowExW(0, L"STATIC", labels[0],
-        WS_CHILD | WS_VISIBLE | SS_CENTER,
-        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel1, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
-    x += BUTTON_SIZE + BUTTON_SPACING;
-    
-    CreateModernButton(hwnd, x, y, BTN_SAVE, DrawModernSaveIcon, SUCCESS_COLOR, L"💾 Save Recording");
-    HWND hLabel2 = CreateWindowExW(0, L"STATIC", labels[1],
-        WS_CHILD | WS_VISIBLE | SS_CENTER,
-        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel2, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
-    x += BUTTON_SIZE + BUTTON_SPACING;
-    
-    CreateModernButton(hwnd, x, y, BTN_RECORD, DrawModernRecordIcon, DANGER_COLOR, L"● Record (F8)");
-    HWND hLabel3 = CreateWindowExW(0, L"STATIC", labels[2],
-        WS_CHILD | WS_VISIBLE | SS_CENTER,
-        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel3, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
-    x += BUTTON_SIZE + BUTTON_SPACING;
-    
-    CreateModernButton(hwnd, x, y, BTN_PLAY, DrawModernPlayIcon, SUCCESS_COLOR, L"▶ Play (Ctrl+Shift+Alt+P)");
-    HWND hLabel4 = CreateWindowExW(0, L"STATIC", labels[3],
-        WS_CHILD | WS_VISIBLE | SS_CENTER,
-        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel4, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
-    x += BUTTON_SIZE + BUTTON_SPACING;
-    
-    CreateModernButton(hwnd, x, y, BTN_STOP_ALL, DrawModernStopIcon, DANGER_COLOR, L"■ Stop All (Pause)");
-    HWND hLabel5 = CreateWindowExW(0, L"STATIC", labels[4],
-        WS_CHILD | WS_VISIBLE | SS_CENTER,
-        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel5, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
-    x += BUTTON_SIZE + BUTTON_SPACING;
-    
-    CreateModernButton(hwnd, x, y, BTN_SETTINGS, DrawModernSettingsIcon, TEXT_SECONDARY, L"⚙ Settings");
-    HWND hLabel6 = CreateWindowExW(0, L"STATIC", labels[5],
-        WS_CHILD | WS_VISIBLE | SS_CENTER,
-        x, labelY, BUTTON_SIZE, 16, hwnd, NULL, GetModuleHandle(NULL), NULL);
-    SendMessage(hLabel6, WM_SETFONT, (WPARAM)hLabelFont, TRUE);
-    
-    // Modern status display area - adjusted for labels
-    y = TOOLBAR_HEIGHT + MARGIN + 4;
-    
-    // Auto-clicker toggle button with modern styling
-    HWND hClickerBtn = CreateWindowExW(0, L"BUTTON", L"⚡ Auto-Clicker (F6)",
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        MARGIN, y, 200, 36,
-        hwnd, (HMENU)BTN_TOGGLE_CLICKER, GetModuleHandle(NULL), NULL);
-    HFONT hClickerFont = CreateFontW(16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    SendMessage(hClickerBtn, WM_SETFONT, (WPARAM)hClickerFont, TRUE);
-    
-    // Modern status text with larger font
-    HWND hStatus = CreateWindowExW(0, L"STATIC", L"● Ready",
-        WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-        MARGIN + 215, y, 400, 36,
-        hwnd, (HMENU)STATIC_STATUS, GetModuleHandle(NULL), NULL);
-    
-    // Set modern font for status display  
-    HFONT hFont = CreateFontW(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    SendMessage(hStatus, WM_SETFONT, (WPARAM)hFont, TRUE);
+    HINSTANCE hi = GetModuleHandle(NULL);
+    int ix = Sc(LEFT_X + 18);
+    int pix = Sc(RIGHT_X + 18);
+    int innerW = Sc(COL_W - 36);
+    int eW = Sc(92), eH = Sc(28);
+
+    // Primary action buttons (owner-draw)
+    CreateFlowButton(hwnd, BTN_RECORD, ix, Sc(REC_TOP + 38), innerW, Sc(42), L"Start / stop recording (F8)");
+    CreateFlowButton(hwnd, BTN_PLAY, pix, Sc(REC_TOP + 38), innerW, Sc(42), L"Start / stop playback (Ctrl+Shift+Alt+P)");
+    CreateFlowButton(hwnd, BTN_TOGGLE_CLICKER, ix, Sc(CLK_TOP + 38), innerW, Sc(42), L"Toggle auto-clicker (F6)");
+
+    // Inline edit fields
+    auto makeEdit = [&](int id, int x, int y, DWORD extra) -> HWND {
+        HWND e = CreateWindowExW(0, L"EDIT", L"",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL | ES_CENTER | extra,
+            x, y, eW, eH, hwnd, (HMENU)(LONG_PTR)id, hi, NULL);
+        SendMessageW(e, WM_SETFONT, (WPARAM)g_fonts.value, TRUE);
+        return e;
+    };
+    makeEdit(EDIT_SPEED,    pix, Sc(REC_TOP + 108), 0);
+    makeEdit(EDIT_LOOPS,    pix, Sc(REC_TOP + 170), ES_NUMBER);
+    makeEdit(EDIT_INTERVAL, ix,  Sc(CLK_TOP + 106), ES_NUMBER);
+
+    // Checkboxes
+    HWND c1 = CreateWindowExW(0, L"BUTTON", L"Loop continuously",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+        pix, Sc(REC_TOP + 210), Sc(220), Sc(22), hwnd, (HMENU)CHK_CONTINUOUS, hi, NULL);
+    SendMessageW(c1, WM_SETFONT, (WPARAM)g_fonts.body, TRUE);
+
+    HWND c2 = CreateWindowExW(0, L"BUTTON", L"Humanize timing",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+        pix, Sc(REC_TOP + 236), Sc(220), Sc(22), hwnd, (HMENU)CHK_HUMANIZE, hi, NULL);
+    SendMessageW(c2, WM_SETFONT, (WPARAM)g_fonts.body, TRUE);
+
+    // Footer buttons
+    CreateFlowButton(hwnd, BTN_OPEN, Sc(LEFT_X), Sc(FOOTER_TOP), Sc(120), Sc(42), L"Open a saved macro (.rec)");
+    CreateFlowButton(hwnd, BTN_SAVE, Sc(LEFT_X + 128), Sc(FOOTER_TOP), Sc(120), Sc(42), L"Save the current macro");
+    CreateFlowButton(hwnd, BTN_SETTINGS, Sc(314), Sc(FOOTER_TOP), Sc(110), Sc(42), L"Hotkeys, always-on-top, about");
+    CreateFlowButton(hwnd, BTN_STOP_ALL, Sc(432), Sc(FOOTER_TOP), Sc(CLIENT_W - PAD - 432), Sc(42), L"Stop everything (Pause)");
+
+    // Initialize control values from state
+    wchar_t buf[32];
+    swprintf(buf, 32, L"%g", g_app.playbackSpeed); SetDlgItemTextW(hwnd, EDIT_SPEED, buf);
+    swprintf(buf, 32, L"%d", g_app.loopCount);      SetDlgItemTextW(hwnd, EDIT_LOOPS, buf);
+    swprintf(buf, 32, L"%d", g_app.clickInterval);  SetDlgItemTextW(hwnd, EDIT_INTERVAL, buf);
+    SendDlgItemMessageW(hwnd, CHK_CONTINUOUS, BM_SETCHECK, g_app.continuous ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendDlgItemMessageW(hwnd, CHK_HUMANIZE,   BM_SETCHECK, g_app.humanizationEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
 }
 
 // ============================================================================
@@ -1561,85 +1391,134 @@ void CreateControls(HWND hwnd) {
 // ============================================================================
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
-    // Enable high-DPI awareness for crisp rendering
+    // High-DPI awareness for crisp rendering
     typedef BOOL(WINAPI* SetProcessDpiAwarenessContextFunc)(DPI_AWARENESS_CONTEXT);
     HMODULE user32 = LoadLibraryA("user32.dll");
     if (user32) {
-        auto setDpiFunc = (SetProcessDpiAwarenessContextFunc)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
-        if (setDpiFunc) {
-            setDpiFunc(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        }
+        auto setDpiFunc = (SetProcessDpiAwarenessContextFunc)(void*)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+        if (setDpiFunc) setDpiFunc(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         FreeLibrary(user32);
     }
-    
+
     flow::protection::EnforceProtection();
-    
+
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken = 0;
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
     INITCOMMONCONTROLSEX icex = {};
     icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
     icex.dwICC = ICC_STANDARD_CLASSES;
     InitCommonControlsEx(&icex);
-    
+
+    // Determine the DPI scale factor for the primary monitor so the whole UI
+    // scales up on high-DPI displays instead of rendering tiny.
+    {
+        HDC screen = GetDC(NULL);
+        int dpi = GetDeviceCaps(screen, LOGPIXELSX);
+        ReleaseDC(NULL, screen);
+        if (dpi > 0) g_scale = dpi / 96.0;
+        if (g_scale < 1.0) g_scale = 1.0;
+    }
+
+    auto mkFont = [](int h, int weight, bool italic = false) -> HFONT {
+        return CreateFontW(h, 0, 0, 0, weight, italic, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    };
+    g_fonts.wordmark  = mkFont(Sc(30), FW_BOLD);
+    g_fonts.cardTitle = mkFont(Sc(13), FW_BOLD);
+    g_fonts.button    = mkFont(Sc(17), FW_SEMIBOLD);
+    g_fonts.body      = mkFont(Sc(16), FW_NORMAL);
+    g_fonts.value     = mkFont(Sc(17), FW_SEMIBOLD);
+    g_fonts.pill      = mkFont(Sc(15), FW_SEMIBOLD);
+    g_fonts.small_    = mkFont(Sc(14), FW_NORMAL);
+
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(WNDCLASSEXW);
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = CreateSolidBrush(BG_PRIMARY);
+    wc.hbrBackground = NULL;  // painted in WM_PAINT
     wc.lpszClassName = L"FLOW_Modern";
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
     wc.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
-    
+
     if (!RegisterClassExW(&wc)) {
         MessageBoxW(NULL, L"Window registration failed!", L"Error", MB_OK | MB_ICONERROR);
         return 1;
     }
-    
-    int windowWidth = (BUTTON_SIZE + BUTTON_SPACING) * 6 + MARGIN * 2;
-    int windowHeight = WINDOW_FULL_HEIGHT + 20;
-    
-    g_app.hwnd = CreateWindowExW(0, L"FLOW_Modern", L"FLOW - Professional Automation Tool",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        (GetSystemMetrics(SM_CXSCREEN) - windowWidth) / 2,
-        (GetSystemMetrics(SM_CYSCREEN) - windowHeight) / 2,
-        windowWidth, windowHeight, NULL, NULL, hInstance, NULL);
-    
+
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
+    RECT wr = { 0, 0, Sc(CLIENT_W), Sc(CLIENT_H) };
+    // Use the DPI-aware frame calculation when available so the client area is
+    // exactly the size we lay out for (AdjustWindowRect uses 96-DPI metrics).
+    typedef BOOL(WINAPI* AdjustForDpiFunc)(LPRECT, DWORD, BOOL, DWORD, UINT);
+    HMODULE u32 = LoadLibraryA("user32.dll");
+    AdjustForDpiFunc adjustForDpi = u32 ?
+        (AdjustForDpiFunc)(void*)GetProcAddress(u32, "AdjustWindowRectExForDpi") : nullptr;
+    if (adjustForDpi) adjustForDpi(&wr, style, FALSE, 0, (UINT)(96 * g_scale + 0.5));
+    else              AdjustWindowRect(&wr, style, FALSE);
+    if (u32) FreeLibrary(u32);
+    int winW = wr.right - wr.left;
+    int winH = wr.bottom - wr.top;
+
+    g_app.hwnd = CreateWindowExW(0, L"FLOW_Modern", L"FLOW",
+        style,
+        (GetSystemMetrics(SM_CXSCREEN) - winW) / 2,
+        (GetSystemMetrics(SM_CYSCREEN) - winH) / 2,
+        winW, winH, NULL, NULL, hInstance, NULL);
+
     if (!g_app.hwnd) {
         MessageBoxW(NULL, L"Window creation failed!", L"Error", MB_OK | MB_ICONERROR);
         return 1;
     }
-    
+
     g_app.engine = new FlowEngine();
-    
+
+    // Restore persisted settings, then apply to engine + UI
+    LoadSettings();
+    g_app.engine->SetPlaybackSpeed(g_app.playbackSpeed);
+    g_app.engine->EnableHumanization(g_app.humanizationEnabled);
+    g_app.engine->ConfigureHumanization(0.0, g_app.humanizationStdDev);
+
     if (!g_app.engine->InstallHooks()) {
         MessageBoxW(NULL, L"Failed to install input hooks!\n\nRun as Administrator.",
             L"Error", MB_OK | MB_ICONERROR);
         delete g_app.engine;
         return 1;
     }
-    
+
     RegisterHotkeys();
-    
     CreateControls(g_app.hwnd);
-    
-    // Set timer to check playback status (check every 100ms)
+    UpdateWindowState();
+
     SetTimer(g_app.hwnd, TIMER_STATUS_CHECK, 100, NULL);
-    
     ShowWindow(g_app.hwnd, nCmdShow);
     UpdateWindow(g_app.hwnd);
-    
+
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        if (!IsDialogMessage(g_app.hwnd, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
     }
-    
+
     UnregisterHotkeys();
-    
     KillTimer(g_app.hwnd, TIMER_STATUS_CHECK);
-    
     g_app.engine->UninstallHooks();
     delete g_app.engine;
-    
+
+    DeleteObject(g_fonts.wordmark);
+    DeleteObject(g_fonts.cardTitle);
+    DeleteObject(g_fonts.button);
+    DeleteObject(g_fonts.body);
+    DeleteObject(g_fonts.value);
+    DeleteObject(g_fonts.pill);
+    DeleteObject(g_fonts.small_);
+    Gdiplus::GdiplusShutdown(gdiplusToken);
+
     return (int)msg.wParam;
 }

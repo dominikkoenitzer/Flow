@@ -87,10 +87,10 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
 // FlowEngine Construction & Destruction
 // ============================================================================
 
-FlowEngine::FlowEngine() 
-    : isRecording(false), isClicking(false), isPlaying(false), 
-      shouldStopPlayback(false), clickInterval(DEFAULT_CLICK_INTERVAL), loopCount(1),
-      currentLoopIteration(0), recordingStartTime(0), humanizationEnabled(true) {
+FlowEngine::FlowEngine()
+    : isRecording(false), recordingStartTime(0), isClicking(false),
+      clickInterval(DEFAULT_CLICK_INTERVAL), isPlaying(false), shouldStopPlayback(false),
+      loopCount(1), currentLoopIteration(0), playbackSpeed(1.0), humanizationEnabled(true) {
     instance = this;
 }
 
@@ -289,7 +289,7 @@ void FlowEngine::ClickerThreadFunction() {
         GetCursorPos(&cursorPos);
 
         // Send left button down
-        INPUT input = {0};
+        INPUT input = {};
         input.type = INPUT_MOUSE;
         input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
         SendInput(1, &input, sizeof(INPUT));
@@ -381,6 +381,11 @@ void FlowEngine::PlaybackThreadFunction() {
             DWORD timeDiff = event.timestamp - lastEventTime;
             lastEventTime = event.timestamp;
 
+            double speed = playbackSpeed.load();
+            if (speed > 0.0 && speed != 1.0 && timeDiff > 0) {
+                timeDiff = static_cast<DWORD>(timeDiff / speed);
+            }
+
             if (humanizationEnabled.load() && timeDiff > 0) {
                 timeDiff = humanizer.AddVariance(timeDiff);
             }
@@ -394,7 +399,7 @@ void FlowEngine::PlaybackThreadFunction() {
                 }
             }
 
-            INPUT input = {0};
+            INPUT input = {};
 
             switch (event.type) {
                 case InputEvent::Type::MOUSE_MOVE: {
