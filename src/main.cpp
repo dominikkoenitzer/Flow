@@ -40,6 +40,8 @@ const COLORREF DANGER_HOVER    = RGB(239, 68,  68);    // red 500
 const COLORREF TEXT_PRIMARY    = RGB(17,  24,  39);    // near-black
 const COLORREF TEXT_SECONDARY  = RGB(100, 116, 139);   // slate 500
 const COLORREF TEXT_FAINT      = RGB(148, 163, 184);   // slate 400
+const COLORREF LABEL_GREY      = RGB(140, 140, 148);   // neutral grey (section labels)
+const COLORREF STATUS_IDLE     = RGB(124, 138, 160);   // soft slate (idle status dot)
 const COLORREF BORDER_DEFAULT  = RGB(226, 232, 240);   // slate 200
 const COLORREF TRACK_BG        = RGB(241, 245, 249);   // slate 100 (ghost / input)
 const COLORREF TRACK_HOVER     = RGB(226, 232, 240);   // slate 200
@@ -49,7 +51,7 @@ const COLORREF BG_DIALOG       = RGB(255, 255, 255);
 // Layout (client-area design units at 96 DPI, single-column workflow).
 constexpr int PAD        = 24;
 constexpr int CLIENT_W   = 460;
-constexpr int CLIENT_H   = 698;
+constexpr int CLIENT_H   = 686;
 constexpr int CONTENT_X  = PAD;                 // 24
 constexpr int CONTENT_W  = CLIENT_W - 2 * PAD;  // 412
 constexpr int CRIGHT     = CLIENT_W - PAD;      // 436 (right edge of content)
@@ -57,35 +59,37 @@ constexpr int BTN_RADIUS = 10;
 constexpr int HERO_H     = 48;                  // primary (hero) button height
 constexpr int SEC_BTN_H  = 44;                  // secondary (auto-clicker) button
 constexpr int FOOT_H     = 40;                  // footer button height
-constexpr int EDIT_W     = 52;
-constexpr int CTRL_W     = CONTENT_W - 16;      // right-aligned control width (toggles)
+constexpr int EDIT_W     = 46;
+constexpr int CTRL_W     = CONTENT_W - 16;      // controls right-align at CONTENT_X+CTRL_W (=420)
+constexpr int CTRL_RIGHT = CONTENT_X + CTRL_W;  // 420
 
 // Vertical rhythm — explicit Y of every element (PaintUI + CreateControls share these)
-constexpr int HEADER_Y     = 24;
+constexpr int WORDMARK_Y   = 14;
+constexpr int SUBTITLE_Y   = 42;
 
-constexpr int REC_DIV_Y    = 56;
-constexpr int REC_LABEL_Y  = 72;
-constexpr int REC_BTN_Y    = 92;
-constexpr int REC_INFO1_Y  = 152;
-constexpr int REC_INFO2_Y  = 174;
+constexpr int REC_DIV_Y    = 66;
+constexpr int REC_LABEL_Y  = 80;
+constexpr int REC_BTN_Y    = 100;
+constexpr int REC_INFO_Y   = 160;
 
-constexpr int PLAY_DIV_Y   = 200;
-constexpr int PLAY_LABEL_Y = 216;
-constexpr int PLAY_BTN_Y   = 236;
-constexpr int ROW_SPEED_Y  = 298;   // label/control row baselines
-constexpr int ROW_LOOPS_Y  = 334;
-constexpr int ROW_CONT_Y   = 370;
-constexpr int ROW_HUM_Y    = 404;
-constexpr int RUNTIME_Y    = 440;
+constexpr int PLAY_DIV_Y   = 190;
+constexpr int PLAY_LABEL_Y = 204;
+constexpr int PLAY_BTN_Y   = 224;
+constexpr int ROW_SPEED_Y  = 286;   // label/control row baselines
+constexpr int ROW_LOOPS_Y  = 320;
+constexpr int ROW_CONT_Y   = 354;
+constexpr int ROW_HUM_Y    = 388;
+constexpr int RUNTIME_Y    = 420;
 
-constexpr int CLK_DIV_Y     = 466;
-constexpr int CLK_LABEL_Y   = 482;
-constexpr int CLK_CAPTION_Y = 500;
-constexpr int CLK_BTN_Y     = 522;
-constexpr int ROW_INTERVAL_Y= 582;
+constexpr int CLK_DIV_Y     = 444;
+constexpr int CLK_LABEL_Y   = 458;
+constexpr int CLK_CAPTION_Y = 476;
+constexpr int CLK_BTN_Y     = 496;
+constexpr int ROW_INTERVAL_Y= 554;
+constexpr int INTERVAL_HELP_Y = 582;
 
-constexpr int FOOT_DIV_Y   = 620;
-constexpr int FOOT_Y       = 634;
+constexpr int FOOT_DIV_Y   = 608;
+constexpr int FOOT_Y       = 622;
 
 // ============================================================================
 // CONTROL IDs
@@ -1171,6 +1175,22 @@ static void TextLine(HDC hdc, const wchar_t* s, int x, int y, HFONT font, COLORR
     SelectObject(hdc, old);
 }
 
+// Hover tracking for the borderless number fields (ghost-stepper affordance).
+static HWND g_hoverEdit = nullptr;
+LRESULT CALLBACK InputEditProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id, DWORD_PTR ref) {
+    (void)id; (void)ref;
+    if (m == WM_MOUSEMOVE && g_hoverEdit != h) {
+        g_hoverEdit = h;
+        TRACKMOUSEEVENT t = { sizeof(t), TME_LEAVE, h, 0 };
+        TrackMouseEvent(&t);
+        InvalidateRect(GetParent(h), NULL, FALSE);
+    } else if (m == WM_MOUSELEAVE) {
+        g_hoverEdit = nullptr;
+        InvalidateRect(GetParent(h), NULL, FALSE);
+    }
+    return DefSubclassProc(h, m, w, l);
+}
+
 static void ApplySpeedEdit(HWND hwnd) {
     wchar_t buf[32];
     GetDlgItemTextW(hwnd, EDIT_SPEED, buf, 32);
@@ -1219,21 +1239,28 @@ static void PaintUI(HDC hdc, RECT client) {
     const int cx = Sc(CONTENT_X);
     const int cright = Sc(CRIGHT);
 
-    // ---- status state (idle uses a visible muted slate; real color when active) ----
+    // ---- status state (idle = soft slate dot; real color only when active) ----
     const wchar_t* stTxt; COLORREF stDot, stTextCol;
     if (g_app.isRecording)     { stTxt = L"Recording"; stDot = DANGER_COLOR;   stTextCol = DANGER_COLOR; }
     else if (g_app.isPlaying)  { stTxt = L"Playing";   stDot = SUCCESS_COLOR;  stTextCol = SUCCESS_COLOR; }
     else if (g_app.isClicking) { stTxt = L"Clicking";  stDot = ACCENT_PRIMARY; stTextCol = ACCENT_PRIMARY; }
-    else                       { stTxt = L"Ready";     stDot = TEXT_SECONDARY; stTextCol = TEXT_SECONDARY; }
+    else                       { stTxt = L"Ready";     stDot = STATUS_IDLE;    stTextCol = TEXT_SECONDARY; }
 
     HFONT of = (HFONT)SelectObject(hdc, g_fonts.pill);
     SIZE sts; GetTextExtentPoint32W(hdc, stTxt, (int)wcslen(stTxt), &sts);
     SelectObject(hdc, of);
     int dotR = Sc(5), dotGap = Sc(9);
     int stX = cright - (dotR * 2 + dotGap + sts.cx);
-    int stCy = Sc(HEADER_Y) + Sc(8);
+    int stCy = Sc(WORDMARK_Y) + Sc(10);
 
-    // ---- dividers + status dot ----
+    // ---- dividers + status dot + input pills ----
+    HWND focus = GetFocus();
+    struct E { int id, x, y, w; };
+    E edits[] = {
+        { EDIT_SPEED,    CTRL_RIGHT - EDIT_W, ROW_SPEED_Y - 4,    EDIT_W },
+        { EDIT_LOOPS,    CTRL_RIGHT - EDIT_W, ROW_LOOPS_Y - 4,    EDIT_W },
+        { EDIT_INTERVAL, CTRL_RIGHT - 70,     ROW_INTERVAL_Y - 4, 70 },
+    };
     {
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -1241,6 +1268,17 @@ static void PaintUI(HDC hdc, RECT client) {
         int ys[] = { Sc(REC_DIV_Y), Sc(PLAY_DIV_Y), Sc(CLK_DIV_Y), Sc(FOOT_DIV_Y) };
         for (int yy : ys) g.DrawLine(&div, (float)cx, (float)yy, (float)cright, (float)yy);
         IconCircle(g, (float)(stX + dotR), (float)stCy, (float)dotR, GP(stDot));
+
+        // Ghost-stepper fields: quiet hairline at rest, lift on hover, accent ring on focus.
+        for (const E& e : edits) {
+            HWND eh = g_app.hwnd ? GetDlgItem(g_app.hwnd, e.id) : nullptr;
+            bool foc = (eh && eh == focus), hov = (eh && eh == g_hoverEdit);
+            float px = Sc(e.x) - Scf(5), py = Sc(e.y) - Scf(3);
+            float pw = Sc(e.w) + Scf(10), ph = Sc(30) + Scf(6);
+            FillRound(g, px, py, pw, ph, Scf(8.0f), GP((foc || hov) ? TRACK_HOVER : TRACK_BG));
+            COLORREF bc = foc ? ACCENT_PRIMARY : BORDER_DEFAULT;
+            StrokeRound(g, px, py, pw, ph, Scf(8.0f), GP(bc), foc ? Scf(1.6f) : Scf(1.0f));
+        }
     }
     {
         HFONT o = (HFONT)SelectObject(hdc, g_fonts.pill);
@@ -1251,35 +1289,16 @@ static void PaintUI(HDC hdc, RECT client) {
         SelectObject(hdc, o);
     }
 
-    // ---- soft input pills behind the borderless edits (accent ring on focus) ----
-    {
-        Gdiplus::Graphics g(hdc);
-        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        struct E { int id, x, y, w; };
-        E edits[] = {
-            { EDIT_SPEED,    368, ROW_SPEED_Y - 4,    EDIT_W },
-            { EDIT_LOOPS,    368, ROW_LOOPS_Y - 4,    EDIT_W },
-            { EDIT_INTERVAL, 110, ROW_INTERVAL_Y - 4, 70 },
-        };
-        HWND focus = GetFocus();
-        for (const E& e : edits) {
-            float px = Sc(e.x) - Scf(5), py = Sc(e.y) - Scf(3);
-            float pw = Sc(e.w) + Scf(10), ph = Sc(30) + Scf(6);
-            FillRound(g, px, py, pw, ph, Scf(8.0f), GP(TRACK_BG));
-            if (g_app.hwnd && GetDlgItem(g_app.hwnd, e.id) == focus)
-                StrokeRound(g, px, py, pw, ph, Scf(8.0f), GP(ACCENT_PRIMARY), Scf(1.6f));
-        }
-    }
+    // ---- header (small brand wordmark above the descriptor) ----
+    TextLine(hdc, L"Flow", cx, Sc(WORDMARK_Y), g_fonts.wordmark, TEXT_PRIMARY);
+    TextLine(hdc, L"Macro recorder & auto-clicker", cx, Sc(SUBTITLE_Y), g_fonts.small_, TEXT_SECONDARY);
 
-    // ---- header (no duplicate wordmark; chrome title carries the name) ----
-    TextLine(hdc, L"Macro recorder & auto-clicker", cx, Sc(HEADER_Y), g_fonts.button, TEXT_PRIMARY);
+    // ---- section labels (neutral grey, not the accent blue) ----
+    TextLine(hdc, L"RECORD",       cx, Sc(REC_LABEL_Y),  g_fonts.cardTitle, LABEL_GREY);
+    TextLine(hdc, L"PLAYBACK",     cx, Sc(PLAY_LABEL_Y), g_fonts.cardTitle, LABEL_GREY);
+    TextLine(hdc, L"AUTO-CLICKER", cx, Sc(CLK_LABEL_Y),  g_fonts.cardTitle, LABEL_GREY);
 
-    // ---- section labels ----
-    TextLine(hdc, L"RECORD",       cx, Sc(REC_LABEL_Y),  g_fonts.cardTitle, TEXT_FAINT);
-    TextLine(hdc, L"PLAYBACK",     cx, Sc(PLAY_LABEL_Y), g_fonts.cardTitle, TEXT_FAINT);
-    TextLine(hdc, L"AUTO-CLICKER", cx, Sc(CLK_LABEL_Y),  g_fonts.cardTitle, TEXT_FAINT);
-
-    // ---- record info / empty state ----
+    // ---- record info / empty state (single readable line) ----
     {
         unsigned long n = g_app.engine ? (unsigned long)g_app.engine->GetEventCount() : 0UL;
         if (n > 0) {
@@ -1290,20 +1309,18 @@ static void PaintUI(HDC hdc, RECT client) {
             else          swprintf(dur, 24, L"%dm %02ds", (int)(s / 60), (int)s % 60);
             wchar_t cap[64];
             swprintf(cap, 64, L"%lu events   ·   %ls recorded", n, dur);
-            TextLine(hdc, cap, cx, Sc(REC_INFO1_Y), g_fonts.mono, TEXT_SECONDARY);
+            TextLine(hdc, cap, cx, Sc(REC_INFO_Y), g_fonts.mono, TEXT_SECONDARY);
         } else {
-            wchar_t hint[96];
-            char kn[32]; strcpy(kn, GetKeyName(g_app.hotkeyRecord, false));
-            wchar_t wkn[32]; MultiByteToWideChar(CP_ACP, 0, kn, -1, wkn, 32);
+            wchar_t hint[96], wkn[32];
+            MultiByteToWideChar(CP_ACP, 0, GetKeyName(g_app.hotkeyRecord, false), -1, wkn, 32);
             swprintf(hint, 96, L"Press %ls to record, or open a saved .rec file.", wkn);
-            TextLine(hdc, L"No macro loaded", cx, Sc(REC_INFO1_Y), g_fonts.body, TEXT_PRIMARY);
-            TextLine(hdc, hint, cx, Sc(REC_INFO2_Y), g_fonts.small_, TEXT_FAINT);
+            TextLine(hdc, hint, cx, Sc(REC_INFO_Y), g_fonts.body, TEXT_SECONDARY);
         }
     }
 
-    // ---- playback rows (labels left; controls are right-aligned child widgets) ----
+    // ---- playback row labels (controls are right-aligned child widgets) ----
     TextLine(hdc, L"Speed", cx, Sc(ROW_SPEED_Y), g_fonts.body, TEXT_SECONDARY);
-    TextLine(hdc, L"×", Sc(424), Sc(ROW_SPEED_Y), g_fonts.body, TEXT_FAINT);
+    TextLine(hdc, L"×", Sc(CTRL_RIGHT) + Sc(4), Sc(ROW_SPEED_Y), g_fonts.body, TEXT_FAINT);
     TextLine(hdc, L"Loops", cx, Sc(ROW_LOOPS_Y), g_fonts.body, TEXT_SECONDARY);
     // (Loop continuously / Humanize labels are drawn by their toggle buttons.)
 
@@ -1322,15 +1339,19 @@ static void PaintUI(HDC hdc, RECT client) {
         TextLine(hdc, rt, cx, Sc(RUNTIME_Y), g_fonts.small_, TEXT_FAINT);
     }
 
-    // ---- auto-clicker (set apart: its own caption — works without a macro) ----
-    TextLine(hdc, L"Spam clicks at a fixed rate — no macro needed.",
+    // ---- auto-clicker (set apart by its own caption — works without a macro) ----
+    TextLine(hdc, L"Click repeatedly at a set interval.",
              cx, Sc(CLK_CAPTION_Y), g_fonts.small_, TEXT_FAINT);
-    TextLine(hdc, L"Interval", cx, Sc(ROW_INTERVAL_Y), g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"Interval (ms)", cx, Sc(ROW_INTERVAL_Y), g_fonts.body, TEXT_SECONDARY);
     {
         wchar_t cps[48];
         int per = g_app.clickInterval > 0 ? g_app.clickInterval : 1;
-        swprintf(cps, 48, L"ms    ≈ %d clicks/sec", (1000 + per / 2) / per);
-        TextLine(hdc, cps, cx + Sc(182), Sc(ROW_INTERVAL_Y), g_fonts.small_, TEXT_FAINT);
+        swprintf(cps, 48, L"≈ %d clicks/sec", (1000 + per / 2) / per);
+        RECT hr = { cx, Sc(INTERVAL_HELP_Y), Sc(CTRL_RIGHT), Sc(INTERVAL_HELP_Y) + Sc(20) };
+        HFONT o = (HFONT)SelectObject(hdc, g_fonts.small_);
+        SetBkMode(hdc, TRANSPARENT); SetTextColor(hdc, TEXT_FAINT);
+        DrawTextW(hdc, cps, -1, &hr, DT_RIGHT | DT_SINGLELINE | DT_TOP);
+        SelectObject(hdc, o);
     }
 }
 
@@ -1481,28 +1502,30 @@ void CreateControls(HWND hwnd) {
     CreateFlowButton(hwnd, BTN_PLAY, cx, Sc(PLAY_BTN_Y), contentW, Sc(HERO_H), L"Play the recorded macro");
     CreateFlowButton(hwnd, BTN_TOGGLE_CLICKER, cx, Sc(CLK_BTN_Y), contentW, Sc(SEC_BTN_H), L"Start / stop the auto-clicker");
 
-    // Inline numeric edits (monospace, borderless — focus ring drawn in PaintUI)
+    // Inline numeric edits — borderless, monospace, right-aligned; right edge at CTRL_RIGHT.
+    // Pill + hover/focus affordance is painted in PaintUI; hover tracked via InputEditProc.
     auto makeEdit = [&](int id, int x, int y, int w, DWORD extra) -> HWND {
         HWND e = CreateWindowExW(0, L"EDIT", L"",
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | ES_CENTER | extra,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | ES_RIGHT | extra,
             x, y, w, Sc(30), hwnd, (HMENU)(LONG_PTR)id, hi, NULL);
         SendMessageW(e, WM_SETFONT, (WPARAM)g_fonts.mono, TRUE);
+        SetWindowSubclass(e, InputEditProc, 0, 0);
         return e;
     };
-    makeEdit(EDIT_SPEED,    Sc(368), Sc(ROW_SPEED_Y - 4),    Sc(EDIT_W), 0);
-    makeEdit(EDIT_LOOPS,    Sc(368), Sc(ROW_LOOPS_Y - 4),    Sc(EDIT_W), ES_NUMBER);
-    makeEdit(EDIT_INTERVAL, Sc(110), Sc(ROW_INTERVAL_Y - 4), Sc(70),     ES_NUMBER);
+    makeEdit(EDIT_SPEED,    Sc(CTRL_RIGHT - EDIT_W), Sc(ROW_SPEED_Y - 4),    Sc(EDIT_W), 0);
+    makeEdit(EDIT_LOOPS,    Sc(CTRL_RIGHT - EDIT_W), Sc(ROW_LOOPS_Y - 4),    Sc(EDIT_W), ES_NUMBER);
+    makeEdit(EDIT_INTERVAL, Sc(CTRL_RIGHT - 70),     Sc(ROW_INTERVAL_Y - 4), Sc(70),     ES_NUMBER);
 
     // Toggle switches (owner-draw; label left + switch right, aligned with the edits)
     CreateFlowButton(hwnd, CHK_CONTINUOUS, cx, Sc(ROW_CONT_Y - 4), Sc(CTRL_W), Sc(30), L"Repeat playback until stopped");
     CreateFlowButton(hwnd, CHK_HUMANIZE,   cx, Sc(ROW_HUM_Y - 4),  Sc(CTRL_W), Sc(30), L"Add small random timing variance");
 
-    // Footer: file ops grouped left; Settings + Stop All on the right
+    // Footer: Open+Save grouped left, big gap, Settings+Stop All grouped right
     int footY = Sc(FOOT_Y);
-    CreateFlowButton(hwnd, BTN_OPEN, cx, footY, Sc(84), Sc(FOOT_H), L"Open a saved macro (.rec)");
-    CreateFlowButton(hwnd, BTN_SAVE, cx + Sc(92), footY, Sc(84), Sc(FOOT_H), L"Save the current macro");
-    int stopW = Sc(104), stopX = Sc(CRIGHT) - stopW;
-    int setW = Sc(88), setX = stopX - Sc(10) - setW;
+    CreateFlowButton(hwnd, BTN_OPEN, cx, footY, Sc(80), Sc(FOOT_H), L"Open a saved macro (.rec)");
+    CreateFlowButton(hwnd, BTN_SAVE, cx + Sc(88), footY, Sc(80), Sc(FOOT_H), L"Save the current macro");
+    int stopW = Sc(92), stopX = Sc(CRIGHT) - stopW;
+    int setW = Sc(84), setX = stopX - Sc(8) - setW;
     CreateFlowButton(hwnd, BTN_SETTINGS, setX, footY, setW, Sc(FOOT_H), L"Hotkeys, always-on-top, about");
     CreateFlowButton(hwnd, BTN_STOP_ALL, stopX, footY, stopW, Sc(FOOT_H), L"Stop everything");
 
@@ -1557,7 +1580,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     };
-    g_fonts.wordmark  = mkFont(Sc(28), FW_BOLD);
+    g_fonts.wordmark  = mkFont(Sc(22), FW_BOLD);
     g_fonts.cardTitle = mkFont(Sc(12), FW_BOLD);   // small tracked section labels
     g_fonts.button    = mkFont(Sc(17), FW_SEMIBOLD);
     g_fonts.body      = mkFont(Sc(16), FW_NORMAL);
