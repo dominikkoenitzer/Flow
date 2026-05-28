@@ -49,39 +49,43 @@ const COLORREF BG_DIALOG       = RGB(255, 255, 255);
 // Layout (client-area design units at 96 DPI, single-column workflow).
 constexpr int PAD        = 24;
 constexpr int CLIENT_W   = 460;
-constexpr int CLIENT_H   = 638;
+constexpr int CLIENT_H   = 698;
 constexpr int CONTENT_X  = PAD;                 // 24
 constexpr int CONTENT_W  = CLIENT_W - 2 * PAD;  // 412
+constexpr int CRIGHT     = CLIENT_W - PAD;      // 436 (right edge of content)
 constexpr int BTN_RADIUS = 10;
-constexpr int HERO_H     = 46;                  // primary section button height
+constexpr int HERO_H     = 48;                  // primary (hero) button height
+constexpr int SEC_BTN_H  = 44;                  // secondary (auto-clicker) button
 constexpr int FOOT_H     = 40;                  // footer button height
+constexpr int EDIT_W     = 52;
+constexpr int CTRL_W     = CONTENT_W - 16;      // right-aligned control width (toggles)
 
-// Vertical rhythm — explicit Y of every element (keeps PaintUI + CreateControls in lockstep)
-constexpr int WORDMARK_Y   = 14;
-constexpr int TAGLINE_Y    = 44;
+// Vertical rhythm — explicit Y of every element (PaintUI + CreateControls share these)
+constexpr int HEADER_Y     = 24;
 
-constexpr int REC_DIV_Y    = 68;
-constexpr int REC_LABEL_Y  = 84;
-constexpr int REC_BTN_Y    = 106;
-constexpr int REC_INFO_Y   = 162;
+constexpr int REC_DIV_Y    = 56;
+constexpr int REC_LABEL_Y  = 72;
+constexpr int REC_BTN_Y    = 92;
+constexpr int REC_INFO1_Y  = 152;
+constexpr int REC_INFO2_Y  = 174;
 
-constexpr int PLAY_DIV_Y   = 192;
-constexpr int PLAY_LABEL_Y = 208;
-constexpr int PLAY_BTN_Y   = 230;
-constexpr int SPEED_ROW_Y  = 290;   // speed/loops label baseline
-constexpr int SPEED_EDIT_Y = 286;
-constexpr int RUNTIME_Y    = 328;
-constexpr int TOG1_Y       = 352;
-constexpr int TOG2_Y       = 388;
+constexpr int PLAY_DIV_Y   = 200;
+constexpr int PLAY_LABEL_Y = 216;
+constexpr int PLAY_BTN_Y   = 236;
+constexpr int ROW_SPEED_Y  = 298;   // label/control row baselines
+constexpr int ROW_LOOPS_Y  = 334;
+constexpr int ROW_CONT_Y   = 370;
+constexpr int ROW_HUM_Y    = 404;
+constexpr int RUNTIME_Y    = 440;
 
-constexpr int CLK_DIV_Y    = 424;
-constexpr int CLK_LABEL_Y  = 440;
-constexpr int CLK_BTN_Y    = 462;
-constexpr int CLK_LBL2_Y   = 522;   // interval label baseline
-constexpr int CLK_EDIT_Y   = 518;
+constexpr int CLK_DIV_Y     = 466;
+constexpr int CLK_LABEL_Y   = 482;
+constexpr int CLK_CAPTION_Y = 500;
+constexpr int CLK_BTN_Y     = 522;
+constexpr int ROW_INTERVAL_Y= 582;
 
-constexpr int FOOT_DIV_Y   = 560;
-constexpr int FOOT_Y       = 574;
+constexpr int FOOT_DIV_Y   = 620;
+constexpr int FOOT_Y       = 634;
 
 // ============================================================================
 // CONTROL IDs
@@ -160,15 +164,15 @@ struct AppState {
     
     // Hotkey settings
     UINT hotkeyRecord = VK_F8;
-    UINT hotkeyPlayback = 'P';
+    UINT hotkeyPlayback = VK_F9;
     UINT hotkeyClicker = VK_F6;
     UINT hotkeyStop = VK_PAUSE;
-    UINT hotkeyModifiers = MOD_CONTROL | MOD_SHIFT | MOD_ALT;  // For playback
+    UINT hotkeyModifiers = 0;  // optional modifiers for playback (none by default)
 } g_app;
 
 // Temporary hotkey storage for customization dialog
 UINT g_tempHotkeyRecord = VK_F8;
-UINT g_tempHotkeyPlayback = 'P';
+UINT g_tempHotkeyPlayback = VK_F9;
 UINT g_tempHotkeyClicker = VK_F6;
 UINT g_tempHotkeyStop = VK_PAUSE;
 
@@ -365,59 +369,75 @@ static void DrawIcon(Gdiplus::Graphics& g, BtnIcon icon, float cx, float cy, Gdi
     }
 }
 
-// Render an owner-draw button. Heroes (Record/Play/Start) are filled + saturated
-// with the action's color and a right-aligned hotkey hint; footer buttons are
-// ghost; Stop All is neutral-ghost until something is actually running.
+enum class Role { Hero, Secondary, Ghost, Disabled };
+
+// Render an owner-draw button. Exactly one section action is the saturated
+// "hero" at a time: Record (idle), Play (once a macro exists), or the active
+// Stop. Play is disabled-grey with no macro; the auto-clicker is a demoted
+// secondary (outline) until running; footer buttons are ghost.
 static void DrawFlowButton(DRAWITEMSTRUCT* dis) {
     HDC hdc = dis->hDC;
     RECT rc = dis->rcItem;
     int w = rc.right - rc.left;
     int h = rc.bottom - rc.top;
     bool pressed = (dis->itemState & ODS_SELECTED) != 0;
+    bool disabled = (dis->itemState & ODS_DISABLED) != 0;
+    bool hasMacro = g_app.engine && g_app.engine->GetEventCount() > 0;
 
     const wchar_t* label = L"";
     BtnIcon icon = BtnIcon::None;
-    bool hero = false;          // filled + hotkey hint
-    bool active = false;
     COLORREF accent = ACCENT_PRIMARY;
+    bool active = false, leftAlign = false;
     wchar_t hint[64] = L"";
+    Role role = Role::Ghost;
 
     switch (dis->CtlID) {
         case BTN_RECORD:
-            hero = true; active = g_app.isRecording; accent = DANGER_COLOR; icon = BtnIcon::Record;
+            leftAlign = true; accent = DANGER_COLOR; icon = BtnIcon::Record;
+            active = g_app.isRecording; role = Role::Hero;
             label = active ? L"Stop Recording" : L"Record";
             MultiByteToWideChar(CP_ACP, 0, GetKeyName(g_app.hotkeyRecord, false), -1, hint, 64); break;
         case BTN_PLAY:
-            hero = true; active = g_app.isPlaying; accent = SUCCESS_COLOR; icon = BtnIcon::Play;
+            leftAlign = true; accent = SUCCESS_COLOR; icon = BtnIcon::Play;
+            active = g_app.isPlaying;
+            role = (disabled || !hasMacro) ? Role::Disabled : Role::Hero;
             label = active ? L"Stop Playback" : L"Play";
             MultiByteToWideChar(CP_ACP, 0, GetKeyName(g_app.hotkeyPlayback, true), -1, hint, 64); break;
         case BTN_TOGGLE_CLICKER:
-            hero = true; active = g_app.isClicking; accent = ACCENT_PRIMARY; icon = BtnIcon::Bolt;
+            leftAlign = true; accent = ACCENT_PRIMARY; icon = BtnIcon::Bolt;
+            active = g_app.isClicking; role = active ? Role::Hero : Role::Secondary;
             label = active ? L"Stop Clicking" : L"Start Clicking";
             MultiByteToWideChar(CP_ACP, 0, GetKeyName(g_app.hotkeyClicker, false), -1, hint, 64); break;
         case BTN_STOP_ALL:
             active = (g_app.isRecording || g_app.isPlaying || g_app.isClicking);
-            accent = DANGER_COLOR; icon = BtnIcon::Stop; label = L"Stop All"; break;
-        case BTN_OPEN:     label = L"Open"; break;
-        case BTN_SAVE:     label = L"Save"; break;
-        case BTN_SETTINGS: label = L"Settings"; break;
+            accent = DANGER_COLOR; label = L"Stop All";
+            if (active) { role = Role::Hero; icon = BtnIcon::Stop; }
+            else        { role = Role::Ghost; icon = BtnIcon::None; }
+            break;
+        case BTN_OPEN:     label = L"Open"; role = Role::Ghost; break;
+        case BTN_SAVE:     label = L"Save"; role = Role::Ghost; break;
+        case BTN_SETTINGS: label = L"Settings"; role = Role::Ghost; break;
         default: break;
     }
 
-    COLORREF fillCol, textCol, iconCol, borderCol = BORDER_DEFAULT;
-    bool drawBorder = false, filled;
-    if (hero) {
-        filled = true;
-        fillCol = pressed ? Darken(accent, 0.86) : accent;
-        textCol = RGB(255, 255, 255); iconCol = RGB(255, 255, 255);
-    } else if (dis->CtlID == BTN_STOP_ALL && active) {
-        filled = true;
-        fillCol = pressed ? Darken(DANGER_COLOR, 0.86) : DANGER_COLOR;
-        textCol = RGB(255, 255, 255); iconCol = RGB(255, 255, 255);
-    } else {
-        filled = false;
-        fillCol = pressed ? TRACK_HOVER : BG_ELEVATED;
-        textCol = TEXT_PRIMARY; iconCol = TEXT_SECONDARY; drawBorder = true;
+    COLORREF fillCol, textCol, iconCol, borderCol = BORDER_DEFAULT, hintCol = TEXT_FAINT;
+    float borderW = 0.0f;
+    switch (role) {
+        case Role::Hero:
+            fillCol = pressed ? Darken(accent, 0.86) : accent;
+            textCol = RGB(255, 255, 255); iconCol = RGB(255, 255, 255);
+            hintCol = RGB(236, 241, 250); break;
+        case Role::Secondary:
+            fillCol = pressed ? TRACK_HOVER : BG_ELEVATED;
+            textCol = accent; iconCol = accent;
+            borderCol = accent; borderW = Scf(1.6f); hintCol = ACCENT_HOVER; break;
+        case Role::Disabled:
+            fillCol = TRACK_BG; textCol = TEXT_FAINT; iconCol = TEXT_FAINT; hintCol = TEXT_FAINT; break;
+        case Role::Ghost:
+        default:
+            fillCol = pressed ? TRACK_HOVER : BG_ELEVATED;
+            textCol = TEXT_PRIMARY; iconCol = TEXT_SECONDARY;
+            borderCol = BORDER_DEFAULT; borderW = Scf(1.0f); break;
     }
 
     // Background
@@ -429,35 +449,31 @@ static void DrawFlowButton(DRAWITEMSTRUCT* dis) {
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         float br = Scf((float)BTN_RADIUS);
         FillRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, br, GP(fillCol));
-        if (drawBorder)
-            StrokeRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, br, GP(borderCol), Scf(1.0f));
+        if (borderW > 0.0f)
+            StrokeRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, br, GP(borderCol), borderW);
     }
-    (void)filled;
 
     SetBkMode(hdc, TRANSPARENT);
     float midY = h / 2.0f;
 
-    if (hero) {
-        // Left-aligned icon + label, right-aligned hotkey hint.
-        float iconX = rc.left + Scf(22.0f);
-        {
+    if (leftAlign) {
+        if (icon != BtnIcon::None) {
             Gdiplus::Graphics g(hdc);
             g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            DrawIcon(g, icon, iconX, midY, GP(iconCol));
+            DrawIcon(g, icon, rc.left + Scf(24.0f), midY, GP(iconCol));
         }
         HFONT old = (HFONT)SelectObject(hdc, g_fonts.button);
-        RECT tr = rc; tr.left = rc.left + Sc(40);
+        RECT tr = rc; tr.left = rc.left + Sc(44);
         SetTextColor(hdc, textCol);
         DrawTextW(hdc, label, -1, &tr, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
         if (hint[0]) {
             SelectObject(hdc, g_fonts.small_);
-            SetTextColor(hdc, RGB(232, 238, 248));   // dimmed white on the filled fill
-            RECT hr = rc; hr.right -= Sc(16);
+            SetTextColor(hdc, hintCol);
+            RECT hr = rc; hr.right -= Sc(18);
             DrawTextW(hdc, hint, -1, &hr, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
         }
         SelectObject(hdc, old);
     } else {
-        // Centered icon + label group.
         HFONT old = (HFONT)SelectObject(hdc, g_fonts.button);
         SIZE ts; GetTextExtentPoint32W(hdc, label, (int)wcslen(label), &ts);
         float iconW = (icon == BtnIcon::None) ? 0.0f : Scf(15.0f);
@@ -551,8 +567,11 @@ static void DrawDlgButton(DRAWITEMSTRUCT* dis, const wchar_t* label, bool primar
 // owner-draw buttons reflect record/play/click state, so a refresh invalidates
 // the painted surface AND the child controls. (No erase => no flicker.)
 void UpdateStatusDisplay() {
-    if (g_app.hwnd)
-        RedrawWindow(g_app.hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
+    if (!g_app.hwnd) return;
+    // Play is only available once a macro exists.
+    HWND play = GetDlgItem(g_app.hwnd, BTN_PLAY);
+    if (play) EnableWindow(play, g_app.engine && g_app.engine->GetEventCount() > 0);
+    RedrawWindow(g_app.hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
 
 // ============================================================================
@@ -1098,7 +1117,7 @@ void ShowAboutDialog(HWND hwnd) {
         L"A macro recorder, player, and high-speed auto-clicker.\r\n\r\n"
         L"Default hotkeys\r\n"
         L"F8  —  Start / stop recording\r\n"
-        L"Ctrl+Shift+Alt+P  —  Start / stop playback\r\n"
+        L"F9  —  Start / stop playback\r\n"
         L"F6  —  Toggle auto-clicker\r\n"
         L"Pause  —  Stop everything\r\n\r\n"
         L"Settings are saved between sessions.",
@@ -1198,23 +1217,23 @@ static void PaintUI(HDC hdc, RECT client) {
     DeleteObject(bg);
 
     const int cx = Sc(CONTENT_X);
-    const int cright = Sc(CLIENT_W) - Sc(PAD);
+    const int cright = Sc(CRIGHT);
 
-    // ---- status state ----
+    // ---- status state (idle uses a visible muted slate; real color when active) ----
     const wchar_t* stTxt; COLORREF stDot, stTextCol;
-    if (g_app.isRecording)     { stTxt = L"Recording"; stDot = DANGER_COLOR;  stTextCol = DANGER_COLOR; }
-    else if (g_app.isPlaying)  { stTxt = L"Playing";   stDot = SUCCESS_COLOR; stTextCol = SUCCESS_COLOR; }
-    else if (g_app.isClicking) { stTxt = L"Clicking";  stDot = ACCENT_PRIMARY;stTextCol = ACCENT_PRIMARY; }
-    else                       { stTxt = L"Ready";     stDot = TEXT_FAINT;    stTextCol = TEXT_SECONDARY; }
+    if (g_app.isRecording)     { stTxt = L"Recording"; stDot = DANGER_COLOR;   stTextCol = DANGER_COLOR; }
+    else if (g_app.isPlaying)  { stTxt = L"Playing";   stDot = SUCCESS_COLOR;  stTextCol = SUCCESS_COLOR; }
+    else if (g_app.isClicking) { stTxt = L"Clicking";  stDot = ACCENT_PRIMARY; stTextCol = ACCENT_PRIMARY; }
+    else                       { stTxt = L"Ready";     stDot = TEXT_SECONDARY; stTextCol = TEXT_SECONDARY; }
 
     HFONT of = (HFONT)SelectObject(hdc, g_fonts.pill);
     SIZE sts; GetTextExtentPoint32W(hdc, stTxt, (int)wcslen(stTxt), &sts);
     SelectObject(hdc, of);
     int dotR = Sc(5), dotGap = Sc(9);
     int stX = cright - (dotR * 2 + dotGap + sts.cx);
-    int stCy = Sc(32);
+    int stCy = Sc(HEADER_Y) + Sc(8);
 
-    // ---- dividers + status dot (anti-aliased) ----
+    // ---- dividers + status dot ----
     {
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -1223,8 +1242,6 @@ static void PaintUI(HDC hdc, RECT client) {
         for (int yy : ys) g.DrawLine(&div, (float)cx, (float)yy, (float)cright, (float)yy);
         IconCircle(g, (float)(stX + dotR), (float)stCy, (float)dotR, GP(stDot));
     }
-
-    // ---- status label ----
     {
         HFONT o = (HFONT)SelectObject(hdc, g_fonts.pill);
         SetBkMode(hdc, TRANSPARENT);
@@ -1234,9 +1251,28 @@ static void PaintUI(HDC hdc, RECT client) {
         SelectObject(hdc, o);
     }
 
-    // ---- header ----
-    TextLine(hdc, L"FLOW", cx, Sc(WORDMARK_Y), g_fonts.wordmark, TEXT_PRIMARY);
-    TextLine(hdc, L"Macro recorder & auto-clicker", cx, Sc(TAGLINE_Y), g_fonts.small_, TEXT_SECONDARY);
+    // ---- soft input pills behind the borderless edits (accent ring on focus) ----
+    {
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        struct E { int id, x, y, w; };
+        E edits[] = {
+            { EDIT_SPEED,    368, ROW_SPEED_Y - 4,    EDIT_W },
+            { EDIT_LOOPS,    368, ROW_LOOPS_Y - 4,    EDIT_W },
+            { EDIT_INTERVAL, 110, ROW_INTERVAL_Y - 4, 70 },
+        };
+        HWND focus = GetFocus();
+        for (const E& e : edits) {
+            float px = Sc(e.x) - Scf(5), py = Sc(e.y) - Scf(3);
+            float pw = Sc(e.w) + Scf(10), ph = Sc(30) + Scf(6);
+            FillRound(g, px, py, pw, ph, Scf(8.0f), GP(TRACK_BG));
+            if (g_app.hwnd && GetDlgItem(g_app.hwnd, e.id) == focus)
+                StrokeRound(g, px, py, pw, ph, Scf(8.0f), GP(ACCENT_PRIMARY), Scf(1.6f));
+        }
+    }
+
+    // ---- header (no duplicate wordmark; chrome title carries the name) ----
+    TextLine(hdc, L"Macro recorder & auto-clicker", cx, Sc(HEADER_Y), g_fonts.button, TEXT_PRIMARY);
 
     // ---- section labels ----
     TextLine(hdc, L"RECORD",       cx, Sc(REC_LABEL_Y),  g_fonts.cardTitle, TEXT_FAINT);
@@ -1253,18 +1289,23 @@ static void PaintUI(HDC hdc, RECT client) {
             if (s < 60.0) swprintf(dur, 24, L"%.1fs", s);
             else          swprintf(dur, 24, L"%dm %02ds", (int)(s / 60), (int)s % 60);
             wchar_t cap[64];
-            swprintf(cap, 64, L"%lu events   ·   %s", n, dur);
-            TextLine(hdc, cap, cx, Sc(REC_INFO_Y), g_fonts.mono, TEXT_SECONDARY);
+            swprintf(cap, 64, L"%lu events   ·   %ls recorded", n, dur);
+            TextLine(hdc, cap, cx, Sc(REC_INFO1_Y), g_fonts.mono, TEXT_SECONDARY);
         } else {
-            TextLine(hdc, L"No macro yet — record one, or open a saved .rec file.",
-                     cx, Sc(REC_INFO_Y), g_fonts.small_, TEXT_FAINT);
+            wchar_t hint[96];
+            char kn[32]; strcpy(kn, GetKeyName(g_app.hotkeyRecord, false));
+            wchar_t wkn[32]; MultiByteToWideChar(CP_ACP, 0, kn, -1, wkn, 32);
+            swprintf(hint, 96, L"Press %ls to record, or open a saved .rec file.", wkn);
+            TextLine(hdc, L"No macro loaded", cx, Sc(REC_INFO1_Y), g_fonts.body, TEXT_PRIMARY);
+            TextLine(hdc, hint, cx, Sc(REC_INFO2_Y), g_fonts.small_, TEXT_FAINT);
         }
     }
 
-    // ---- playback inline labels ----
-    TextLine(hdc, L"Speed", cx, Sc(SPEED_ROW_Y), g_fonts.body, TEXT_SECONDARY);
-    TextLine(hdc, L"×", cx + Sc(116), Sc(SPEED_ROW_Y), g_fonts.body, TEXT_FAINT);
-    TextLine(hdc, L"Loops", cx + Sc(150), Sc(SPEED_ROW_Y), g_fonts.body, TEXT_SECONDARY);
+    // ---- playback rows (labels left; controls are right-aligned child widgets) ----
+    TextLine(hdc, L"Speed", cx, Sc(ROW_SPEED_Y), g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"×", Sc(424), Sc(ROW_SPEED_Y), g_fonts.body, TEXT_FAINT);
+    TextLine(hdc, L"Loops", cx, Sc(ROW_LOOPS_Y), g_fonts.body, TEXT_SECONDARY);
+    // (Loop continuously / Humanize labels are drawn by their toggle buttons.)
 
     // ---- runtime estimate ----
     if (g_app.engine && g_app.engine->GetEventCount() > 0) {
@@ -1281,13 +1322,15 @@ static void PaintUI(HDC hdc, RECT client) {
         TextLine(hdc, rt, cx, Sc(RUNTIME_Y), g_fonts.small_, TEXT_FAINT);
     }
 
-    // ---- auto-clicker inline labels ----
-    TextLine(hdc, L"Interval", cx, Sc(CLK_LBL2_Y), g_fonts.body, TEXT_SECONDARY);
+    // ---- auto-clicker (set apart: its own caption — works without a macro) ----
+    TextLine(hdc, L"Spam clicks at a fixed rate — no macro needed.",
+             cx, Sc(CLK_CAPTION_Y), g_fonts.small_, TEXT_FAINT);
+    TextLine(hdc, L"Interval", cx, Sc(ROW_INTERVAL_Y), g_fonts.body, TEXT_SECONDARY);
     {
         wchar_t cps[48];
         int per = g_app.clickInterval > 0 ? g_app.clickInterval : 1;
         swprintf(cps, 48, L"ms    ≈ %d clicks/sec", (1000 + per / 2) / per);
-        TextLine(hdc, cps, cx + Sc(160), Sc(CLK_LBL2_Y), g_fonts.small_, TEXT_FAINT);
+        TextLine(hdc, cps, cx + Sc(182), Sc(ROW_INTERVAL_Y), g_fonts.small_, TEXT_FAINT);
     }
 }
 
@@ -1314,11 +1357,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_CTLCOLOREDIT:
         case WM_CTLCOLORSTATIC: {
-            static HBRUSH white = CreateSolidBrush(BG_ELEVATED);
+            static HBRUSH track = CreateSolidBrush(TRACK_BG);
             HDC dc = (HDC)wParam;
             SetTextColor(dc, TEXT_PRIMARY);
-            SetBkColor(dc, BG_ELEVATED);
-            return (INT_PTR)white;
+            SetBkColor(dc, TRACK_BG);
+            return (INT_PTR)track;
         }
 
         case WM_COMMAND: {
@@ -1329,6 +1372,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (id == EDIT_SPEED) ApplySpeedEdit(hwnd);
                 else if (id == EDIT_LOOPS) ApplyLoopsEdit(hwnd);
                 else if (id == EDIT_INTERVAL) ApplyIntervalEdit(hwnd);
+                InvalidateRect(hwnd, NULL, FALSE);   // clear focus ring
+                break;
+            }
+            if (code == EN_SETFOCUS) {
+                InvalidateRect(hwnd, NULL, FALSE);    // draw focus ring
                 break;
             }
 
@@ -1428,33 +1476,33 @@ void CreateControls(HWND hwnd) {
     int cx = Sc(CONTENT_X);
     int contentW = Sc(CONTENT_W);
 
-    // Hero (primary) buttons — full-width, tall
+    // Section action buttons (visual weight resolved per-state in DrawFlowButton)
     CreateFlowButton(hwnd, BTN_RECORD, cx, Sc(REC_BTN_Y), contentW, Sc(HERO_H), L"Start / stop recording");
-    CreateFlowButton(hwnd, BTN_PLAY, cx, Sc(PLAY_BTN_Y), contentW, Sc(HERO_H), L"Start / stop playback");
-    CreateFlowButton(hwnd, BTN_TOGGLE_CLICKER, cx, Sc(CLK_BTN_Y), contentW, Sc(HERO_H), L"Start / stop the auto-clicker");
+    CreateFlowButton(hwnd, BTN_PLAY, cx, Sc(PLAY_BTN_Y), contentW, Sc(HERO_H), L"Play the recorded macro");
+    CreateFlowButton(hwnd, BTN_TOGGLE_CLICKER, cx, Sc(CLK_BTN_Y), contentW, Sc(SEC_BTN_H), L"Start / stop the auto-clicker");
 
-    // Inline numeric edits (monospace)
+    // Inline numeric edits (monospace, borderless — focus ring drawn in PaintUI)
     auto makeEdit = [&](int id, int x, int y, int w, DWORD extra) -> HWND {
         HWND e = CreateWindowExW(0, L"EDIT", L"",
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL | ES_CENTER | extra,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | ES_CENTER | extra,
             x, y, w, Sc(30), hwnd, (HMENU)(LONG_PTR)id, hi, NULL);
         SendMessageW(e, WM_SETFONT, (WPARAM)g_fonts.mono, TRUE);
         return e;
     };
-    makeEdit(EDIT_SPEED,    cx + Sc(54),  Sc(SPEED_EDIT_Y), Sc(56), 0);
-    makeEdit(EDIT_LOOPS,    cx + Sc(206), Sc(SPEED_EDIT_Y), Sc(56), ES_NUMBER);
-    makeEdit(EDIT_INTERVAL, cx + Sc(80),  Sc(CLK_EDIT_Y),   Sc(70), ES_NUMBER);
+    makeEdit(EDIT_SPEED,    Sc(368), Sc(ROW_SPEED_Y - 4),    Sc(EDIT_W), 0);
+    makeEdit(EDIT_LOOPS,    Sc(368), Sc(ROW_LOOPS_Y - 4),    Sc(EDIT_W), ES_NUMBER);
+    makeEdit(EDIT_INTERVAL, Sc(110), Sc(ROW_INTERVAL_Y - 4), Sc(70),     ES_NUMBER);
 
-    // Toggle switches (owner-draw)
-    CreateFlowButton(hwnd, CHK_CONTINUOUS, cx, Sc(TOG1_Y), contentW, Sc(30), L"Repeat playback until stopped");
-    CreateFlowButton(hwnd, CHK_HUMANIZE, cx, Sc(TOG2_Y), contentW, Sc(30), L"Add small random timing variance");
+    // Toggle switches (owner-draw; label left + switch right, aligned with the edits)
+    CreateFlowButton(hwnd, CHK_CONTINUOUS, cx, Sc(ROW_CONT_Y - 4), Sc(CTRL_W), Sc(30), L"Repeat playback until stopped");
+    CreateFlowButton(hwnd, CHK_HUMANIZE,   cx, Sc(ROW_HUM_Y - 4),  Sc(CTRL_W), Sc(30), L"Add small random timing variance");
 
-    // Footer: file ops left, Settings + Stop All right
+    // Footer: file ops grouped left; Settings + Stop All on the right
     int footY = Sc(FOOT_Y);
-    CreateFlowButton(hwnd, BTN_OPEN, cx, footY, Sc(92), Sc(FOOT_H), L"Open a saved macro (.rec)");
-    CreateFlowButton(hwnd, BTN_SAVE, cx + Sc(100), footY, Sc(92), Sc(FOOT_H), L"Save the current macro");
-    int stopW = Sc(116), stopX = Sc(CLIENT_W - PAD) - stopW;
-    int setW = Sc(96), setX = stopX - Sc(8) - setW;
+    CreateFlowButton(hwnd, BTN_OPEN, cx, footY, Sc(84), Sc(FOOT_H), L"Open a saved macro (.rec)");
+    CreateFlowButton(hwnd, BTN_SAVE, cx + Sc(92), footY, Sc(84), Sc(FOOT_H), L"Save the current macro");
+    int stopW = Sc(104), stopX = Sc(CRIGHT) - stopW;
+    int setW = Sc(88), setX = stopX - Sc(10) - setW;
     CreateFlowButton(hwnd, BTN_SETTINGS, setX, footY, setW, Sc(FOOT_H), L"Hotkeys, always-on-top, about");
     CreateFlowButton(hwnd, BTN_STOP_ALL, stopX, footY, stopW, Sc(FOOT_H), L"Stop everything");
 
@@ -1463,6 +1511,10 @@ void CreateControls(HWND hwnd) {
     swprintf(buf, 32, L"%g", g_app.playbackSpeed); SetDlgItemTextW(hwnd, EDIT_SPEED, buf);
     swprintf(buf, 32, L"%d", g_app.loopCount);      SetDlgItemTextW(hwnd, EDIT_LOOPS, buf);
     swprintf(buf, 32, L"%d", g_app.clickInterval);  SetDlgItemTextW(hwnd, EDIT_INTERVAL, buf);
+
+    // Play is disabled until a macro exists
+    EnableWindow(GetDlgItem(hwnd, BTN_PLAY),
+                 g_app.engine && g_app.engine->GetEventCount() > 0);
 }
 
 // ============================================================================
