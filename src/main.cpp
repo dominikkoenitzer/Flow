@@ -46,27 +46,42 @@ const COLORREF TRACK_HOVER     = RGB(226, 232, 240);   // slate 200
 const COLORREF SHADOW_COLOR    = RGB(148, 163, 184);
 const COLORREF BG_DIALOG       = RGB(255, 255, 255);
 
-// Layout (client-area coordinates, fixed-size window)
-constexpr int PAD          = 18;   // outer padding
-constexpr int GAP          = 14;   // gap between cards
-constexpr int COL_W        = 275;  // card column width
-constexpr int CARD_RADIUS  = 12;
-constexpr int BTN_RADIUS   = 9;
-constexpr int HEADER_H     = 58;
-constexpr int CLIENT_W     = 600;
-constexpr int CLIENT_H     = 426;
+// Layout (client-area design units at 96 DPI, single-column workflow).
+constexpr int PAD        = 24;
+constexpr int CLIENT_W   = 460;
+constexpr int CLIENT_H   = 638;
+constexpr int CONTENT_X  = PAD;                 // 24
+constexpr int CONTENT_W  = CLIENT_W - 2 * PAD;  // 412
+constexpr int BTN_RADIUS = 10;
+constexpr int HERO_H     = 46;                  // primary section button height
+constexpr int FOOT_H     = 40;                  // footer button height
 
-// Card geometry
-constexpr int CARDS_TOP    = HEADER_H + 6;             // 64
-constexpr int LEFT_X       = PAD;                      // 18
-constexpr int RIGHT_X      = PAD + COL_W + GAP;        // 307
-constexpr int REC_H        = 120;
-constexpr int CLK_H        = 150;
-constexpr int REC_TOP      = CARDS_TOP;                // 64
-constexpr int CLK_TOP      = CARDS_TOP + REC_H + GAP;  // 198
-constexpr int PLAY_H       = REC_H + GAP + CLK_H;      // 284
-constexpr int FOOTER_TOP   = CARDS_TOP + PLAY_H + GAP; // 362
-constexpr int FOOTER_H     = 46;
+// Vertical rhythm — explicit Y of every element (keeps PaintUI + CreateControls in lockstep)
+constexpr int WORDMARK_Y   = 14;
+constexpr int TAGLINE_Y    = 44;
+
+constexpr int REC_DIV_Y    = 68;
+constexpr int REC_LABEL_Y  = 84;
+constexpr int REC_BTN_Y    = 106;
+constexpr int REC_INFO_Y   = 162;
+
+constexpr int PLAY_DIV_Y   = 192;
+constexpr int PLAY_LABEL_Y = 208;
+constexpr int PLAY_BTN_Y   = 230;
+constexpr int SPEED_ROW_Y  = 290;   // speed/loops label baseline
+constexpr int SPEED_EDIT_Y = 286;
+constexpr int RUNTIME_Y    = 328;
+constexpr int TOG1_Y       = 352;
+constexpr int TOG2_Y       = 388;
+
+constexpr int CLK_DIV_Y    = 424;
+constexpr int CLK_LABEL_Y  = 440;
+constexpr int CLK_BTN_Y    = 462;
+constexpr int CLK_LBL2_Y   = 522;   // interval label baseline
+constexpr int CLK_EDIT_Y   = 518;
+
+constexpr int FOOT_DIV_Y   = 560;
+constexpr int FOOT_Y       = 574;
 
 // ============================================================================
 // CONTROL IDs
@@ -114,8 +129,9 @@ struct UiFonts {
     HFONT button = nullptr;    // button labels
     HFONT body = nullptr;      // normal text
     HFONT value = nullptr;     // edit-field values
-    HFONT pill = nullptr;      // status pill
+    HFONT pill = nullptr;      // status label
     HFONT small_ = nullptr;    // muted captions
+    HFONT mono = nullptr;      // monospace numerics
 } g_fonts;
 
 // DPI scale factor (1.0 at 96 DPI). All layout constants above are design units
@@ -274,19 +290,6 @@ static void StrokeRound(Gdiplus::Graphics& g, float x, float y, float w, float h
     g.DrawPath(&pen, &path);
 }
 
-// Draw a white card with a soft drop shadow and a hairline border.
-static void DrawCard(Gdiplus::Graphics& g, int x, int y, int w, int h) {
-    float r = Scf((float)CARD_RADIUS);
-    // Soft shadow: a few translucent offset rounds
-    for (int i = 3; i >= 1; --i) {
-        BYTE a = (BYTE)(10 + (3 - i) * 6);
-        FillRound(g, (float)(x - i + 1), (float)(y + i), (float)(w + 2 * i - 2),
-                  (float)(h + i), r + i, GP(SHADOW_COLOR, a));
-    }
-    FillRound(g, (float)x, (float)y, (float)w, (float)h, r, GP(BG_ELEVATED));
-    StrokeRound(g, (float)x, (float)y, (float)w, (float)h, r, GP(BORDER_DEFAULT), Scf(1.0f));
-}
-
 // ---- Vector glyphs (centered at cx,cy, half-extent s) ----
 static void IconCircle(Gdiplus::Graphics& g, float cx, float cy, float r, Gdiplus::Color c) {
     Gdiplus::SolidBrush b(c);
@@ -344,9 +347,27 @@ HWND CreateFlowButton(HWND parent, int id, int x, int y, int w, int h, const wch
 }
 
 enum class BtnIcon { None, Record, Play, Bolt, Stop };
-enum class BtnStyle { Ghost, Filled };
 
-// Render a single owner-draw button.
+static COLORREF Darken(COLORREF c, double f) {
+    return RGB((int)(GetRValue(c) * f), (int)(GetGValue(c) * f), (int)(GetBValue(c) * f));
+}
+
+// Forward decl (defined in the ACTIONS section); used for on-button hotkey hints.
+const char* GetKeyName(UINT vk, bool withModifiers);
+
+static void DrawIcon(Gdiplus::Graphics& g, BtnIcon icon, float cx, float cy, Gdiplus::Color c) {
+    switch (icon) {
+        case BtnIcon::Record:   IconCircle(g, cx, cy, Scf(6.5f), c); break;
+        case BtnIcon::Play:     IconTriangle(g, cx, cy, Scf(7.5f), c); break;
+        case BtnIcon::Bolt:     IconBolt(g, cx, cy, Scf(9.0f), c); break;
+        case BtnIcon::Stop:     IconSquare(g, cx, cy, Scf(6.0f), c); break;
+        default: break;
+    }
+}
+
+// Render an owner-draw button. Heroes (Record/Play/Start) are filled + saturated
+// with the action's color and a right-aligned hotkey hint; footer buttons are
+// ghost; Stop All is neutral-ghost until something is actually running.
 static void DrawFlowButton(DRAWITEMSTRUCT* dis) {
     HDC hdc = dis->hDC;
     RECT rc = dis->rcItem;
@@ -354,61 +375,56 @@ static void DrawFlowButton(DRAWITEMSTRUCT* dis) {
     int h = rc.bottom - rc.top;
     bool pressed = (dis->itemState & ODS_SELECTED) != 0;
 
-    // Resolve per-button appearance
     const wchar_t* label = L"";
     BtnIcon icon = BtnIcon::None;
-    BtnStyle style = BtnStyle::Ghost;
-    COLORREF accent = ACCENT_PRIMARY;   // used for icon (ghost) or fill (filled)
+    bool hero = false;          // filled + hotkey hint
     bool active = false;
+    COLORREF accent = ACCENT_PRIMARY;
+    wchar_t hint[64] = L"";
 
     switch (dis->CtlID) {
         case BTN_RECORD:
-            active = g_app.isRecording; accent = DANGER_COLOR; icon = BtnIcon::Record;
-            label = active ? L"Recording" : L"Record"; break;
+            hero = true; active = g_app.isRecording; accent = DANGER_COLOR; icon = BtnIcon::Record;
+            label = active ? L"Stop Recording" : L"Record";
+            MultiByteToWideChar(CP_ACP, 0, GetKeyName(g_app.hotkeyRecord, false), -1, hint, 64); break;
         case BTN_PLAY:
-            active = g_app.isPlaying; accent = SUCCESS_COLOR; icon = BtnIcon::Play;
-            label = active ? L"Playing" : L"Play"; break;
+            hero = true; active = g_app.isPlaying; accent = SUCCESS_COLOR; icon = BtnIcon::Play;
+            label = active ? L"Stop Playback" : L"Play";
+            MultiByteToWideChar(CP_ACP, 0, GetKeyName(g_app.hotkeyPlayback, true), -1, hint, 64); break;
         case BTN_TOGGLE_CLICKER:
-            active = g_app.isClicking; accent = ACCENT_PRIMARY; icon = BtnIcon::Bolt;
-            label = active ? L"Clicking" : L"Start"; break;
+            hero = true; active = g_app.isClicking; accent = ACCENT_PRIMARY; icon = BtnIcon::Bolt;
+            label = active ? L"Stop Clicking" : L"Start Clicking";
+            MultiByteToWideChar(CP_ACP, 0, GetKeyName(g_app.hotkeyClicker, false), -1, hint, 64); break;
         case BTN_STOP_ALL:
-            style = BtnStyle::Filled; accent = DANGER_COLOR; icon = BtnIcon::Stop;
-            label = L"Stop All"; active = true; break;
-        case BTN_OPEN:   label = L"Open";     accent = ACCENT_PRIMARY; break;
-        case BTN_SAVE:   label = L"Save";     accent = ACCENT_PRIMARY; break;
-        case BTN_SETTINGS: label = L"Settings"; accent = TEXT_SECONDARY; break;
+            active = (g_app.isRecording || g_app.isPlaying || g_app.isClicking);
+            accent = DANGER_COLOR; icon = BtnIcon::Stop; label = L"Stop All"; break;
+        case BTN_OPEN:     label = L"Open"; break;
+        case BTN_SAVE:     label = L"Save"; break;
+        case BTN_SETTINGS: label = L"Settings"; break;
         default: break;
     }
-    if (active) style = BtnStyle::Filled;
 
     COLORREF fillCol, textCol, iconCol, borderCol = BORDER_DEFAULT;
-    bool drawBorder = false;
-    if (style == BtnStyle::Filled) {
-        fillCol = pressed ? ACCENT_PRESSED : accent;
-        if (accent == DANGER_COLOR)  fillCol = pressed ? DANGER_COLOR  : DANGER_HOVER;
-        if (accent == SUCCESS_COLOR) fillCol = pressed ? SUCCESS_COLOR : SUCCESS_HOVER;
-        if (accent == ACCENT_PRIMARY)fillCol = pressed ? ACCENT_PRESSED: ACCENT_PRIMARY;
-        textCol = RGB(255, 255, 255);
-        iconCol = RGB(255, 255, 255);
+    bool drawBorder = false, filled;
+    if (hero) {
+        filled = true;
+        fillCol = pressed ? Darken(accent, 0.86) : accent;
+        textCol = RGB(255, 255, 255); iconCol = RGB(255, 255, 255);
+    } else if (dis->CtlID == BTN_STOP_ALL && active) {
+        filled = true;
+        fillCol = pressed ? Darken(DANGER_COLOR, 0.86) : DANGER_COLOR;
+        textCol = RGB(255, 255, 255); iconCol = RGB(255, 255, 255);
     } else {
-        fillCol = pressed ? TRACK_HOVER : TRACK_BG;
-        textCol = TEXT_PRIMARY;
-        iconCol = accent;
-        drawBorder = true;
+        filled = false;
+        fillCol = pressed ? TRACK_HOVER : BG_ELEVATED;
+        textCol = TEXT_PRIMARY; iconCol = TEXT_SECONDARY; drawBorder = true;
     }
 
-    // The surface the button sits on (so the rounded corners blend in):
-    // footer buttons are on the gray window, card buttons are on white cards.
-    COLORREF behind = (dis->CtlID == BTN_OPEN || dis->CtlID == BTN_SAVE ||
-                       dis->CtlID == BTN_SETTINGS || dis->CtlID == BTN_STOP_ALL)
-                          ? BG_PRIMARY : BG_ELEVATED;
-
-    // Background (anti-aliased)
+    // Background
     {
-        HBRUSH bb = CreateSolidBrush(behind);
+        HBRUSH bb = CreateSolidBrush(BG_PRIMARY);
         FillRect(hdc, &rc, bb);
         DeleteObject(bb);
-
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         float br = Scf((float)BTN_RADIUS);
@@ -416,39 +432,77 @@ static void DrawFlowButton(DRAWITEMSTRUCT* dis) {
         if (drawBorder)
             StrokeRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, br, GP(borderCol), Scf(1.0f));
     }
+    (void)filled;
 
-    // Measure label to center the icon + text group
-    HFONT old = (HFONT)SelectObject(hdc, g_fonts.button);
-    SIZE ts;
-    GetTextExtentPoint32W(hdc, label, (int)wcslen(label), &ts);
-
-    float iconW = (icon == BtnIcon::None) ? 0.0f : Scf(16.0f);
-    float iconGap = (icon == BtnIcon::None) ? 0.0f : Scf(9.0f);
-    float groupW = iconW + iconGap + ts.cx;
-    float startX = (w - groupW) / 2.0f;
+    SetBkMode(hdc, TRANSPARENT);
     float midY = h / 2.0f;
 
-    if (icon != BtnIcon::None) {
-        Gdiplus::Graphics g(hdc);
-        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        float icx = startX + iconW / 2.0f;
-        Gdiplus::Color ic = GP(iconCol);
-        switch (icon) {
-            case BtnIcon::Record:   IconCircle(g, icx, midY, Scf(6.5f), ic); break;
-            case BtnIcon::Play:     IconTriangle(g, icx, midY, Scf(7.5f), ic); break;
-            case BtnIcon::Bolt:     IconBolt(g, icx, midY, Scf(9.0f), ic); break;
-            case BtnIcon::Stop:     IconSquare(g, icx, midY, Scf(6.0f), ic); break;
-            default: break;
+    if (hero) {
+        // Left-aligned icon + label, right-aligned hotkey hint.
+        float iconX = rc.left + Scf(22.0f);
+        {
+            Gdiplus::Graphics g(hdc);
+            g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            DrawIcon(g, icon, iconX, midY, GP(iconCol));
         }
+        HFONT old = (HFONT)SelectObject(hdc, g_fonts.button);
+        RECT tr = rc; tr.left = rc.left + Sc(40);
+        SetTextColor(hdc, textCol);
+        DrawTextW(hdc, label, -1, &tr, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+        if (hint[0]) {
+            SelectObject(hdc, g_fonts.small_);
+            SetTextColor(hdc, RGB(232, 238, 248));   // dimmed white on the filled fill
+            RECT hr = rc; hr.right -= Sc(16);
+            DrawTextW(hdc, hint, -1, &hr, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
+        }
+        SelectObject(hdc, old);
+    } else {
+        // Centered icon + label group.
+        HFONT old = (HFONT)SelectObject(hdc, g_fonts.button);
+        SIZE ts; GetTextExtentPoint32W(hdc, label, (int)wcslen(label), &ts);
+        float iconW = (icon == BtnIcon::None) ? 0.0f : Scf(15.0f);
+        float iconGap = (icon == BtnIcon::None) ? 0.0f : Scf(8.0f);
+        float startX = (w - (iconW + iconGap + ts.cx)) / 2.0f;
+        if (icon != BtnIcon::None) {
+            Gdiplus::Graphics g(hdc);
+            g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            DrawIcon(g, icon, startX + iconW / 2.0f, midY, GP(iconCol));
+        }
+        RECT tr = rc; tr.left = (LONG)(startX + iconW + iconGap);
+        SetTextColor(hdc, textCol);
+        DrawTextW(hdc, label, -1, &tr, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+        SelectObject(hdc, old);
     }
+}
 
-    // Label
-    RECT tr = rc;
-    tr.left = (LONG)(startX + iconW + iconGap);
+// An on/off toggle switch with a label on the left and the switch on the right.
+static void DrawToggle(DRAWITEMSTRUCT* dis, const wchar_t* label, bool on) {
+    HDC hdc = dis->hDC;
+    RECT rc = dis->rcItem;
+    int w = rc.right - rc.left, h = rc.bottom - rc.top;
+
+    HBRUSH bb = CreateSolidBrush(BG_PRIMARY);
+    FillRect(hdc, &rc, bb);
+    DeleteObject(bb);
+
+    HFONT old = (HFONT)SelectObject(hdc, g_fonts.body);
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, textCol);
+    SetTextColor(hdc, TEXT_PRIMARY);
+    RECT tr = rc;
     DrawTextW(hdc, label, -1, &tr, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     SelectObject(hdc, old);
+
+    float tw = Scf(42.0f), th = Scf(24.0f);
+    float tx = rc.left + w - tw;
+    float ty = (h - th) / 2.0f;
+    Gdiplus::Graphics g(hdc);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    FillRound(g, tx, ty, tw, th, th / 2.0f, GP(on ? ACCENT_PRIMARY : RGB(203, 213, 225)));
+    float kr = th / 2.0f - Scf(3.0f);
+    float ky = ty + th / 2.0f;
+    float kx = on ? (tx + tw - th / 2.0f) : (tx + th / 2.0f);
+    Gdiplus::SolidBrush knob(GP(RGB(255, 255, 255)));
+    g.FillEllipse(&knob, kx - kr, ky - kr, kr * 2, kr * 2);
 }
 
 // A centered, rounded dialog button (primary = filled accent, else ghost).
@@ -1143,70 +1197,98 @@ static void PaintUI(HDC hdc, RECT client) {
     FillRect(hdc, &client, bg);
     DeleteObject(bg);
 
-    const wchar_t* stTxt; COLORREF stCol;
-    if (g_app.isRecording)     { stTxt = L"Recording"; stCol = DANGER_COLOR; }
-    else if (g_app.isPlaying)  { stTxt = L"Playing";   stCol = SUCCESS_COLOR; }
-    else if (g_app.isClicking) { stTxt = L"Clicking";  stCol = ACCENT_PRIMARY; }
-    else                       { stTxt = L"Ready";     stCol = TEXT_SECONDARY; }
+    const int cx = Sc(CONTENT_X);
+    const int cright = Sc(CLIENT_W) - Sc(PAD);
 
-    HFONT oldf = (HFONT)SelectObject(hdc, g_fonts.pill);
-    SIZE pillTs; GetTextExtentPoint32W(hdc, stTxt, (int)wcslen(stTxt), &pillTs);
-    SelectObject(hdc, oldf);
-    int pillPadL = Sc(14), pillDot = Sc(8), pillGap = Sc(8), pillPadR = Sc(16), pillH = Sc(28);
-    int pillW = pillPadL + pillDot + pillGap + pillTs.cx + pillPadR;
-    int pillX = Sc(CLIENT_W) - Sc(PAD) - pillW;
-    int pillY = (Sc(HEADER_H) - pillH) / 2 + Sc(2);
+    // ---- status state ----
+    const wchar_t* stTxt; COLORREF stDot, stTextCol;
+    if (g_app.isRecording)     { stTxt = L"Recording"; stDot = DANGER_COLOR;  stTextCol = DANGER_COLOR; }
+    else if (g_app.isPlaying)  { stTxt = L"Playing";   stDot = SUCCESS_COLOR; stTextCol = SUCCESS_COLOR; }
+    else if (g_app.isClicking) { stTxt = L"Clicking";  stDot = ACCENT_PRIMARY;stTextCol = ACCENT_PRIMARY; }
+    else                       { stTxt = L"Ready";     stDot = TEXT_FAINT;    stTextCol = TEXT_SECONDARY; }
 
+    HFONT of = (HFONT)SelectObject(hdc, g_fonts.pill);
+    SIZE sts; GetTextExtentPoint32W(hdc, stTxt, (int)wcslen(stTxt), &sts);
+    SelectObject(hdc, of);
+    int dotR = Sc(5), dotGap = Sc(9);
+    int stX = cright - (dotR * 2 + dotGap + sts.cx);
+    int stCy = Sc(32);
+
+    // ---- dividers + status dot (anti-aliased) ----
     {
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        Gdiplus::Pen divider(GP(BORDER_DEFAULT));
-        g.DrawLine(&divider, (float)Sc(PAD), (float)Sc(HEADER_H), (float)(Sc(CLIENT_W) - Sc(PAD)), (float)Sc(HEADER_H));
-        DrawCard(g, Sc(LEFT_X),  Sc(REC_TOP), Sc(COL_W), Sc(REC_H));
-        DrawCard(g, Sc(LEFT_X),  Sc(CLK_TOP), Sc(COL_W), Sc(CLK_H));
-        DrawCard(g, Sc(RIGHT_X), Sc(REC_TOP), Sc(COL_W), Sc(PLAY_H));
-        FillRound(g, (float)pillX, (float)pillY, (float)pillW, (float)pillH, pillH / 2.0f, GP(stCol, 30));
-        IconCircle(g, pillX + pillPadL + pillDot / 2.0f, pillY + pillH / 2.0f, pillDot / 2.0f, GP(stCol));
+        Gdiplus::Pen div(GP(BORDER_DEFAULT), Scf(1.0f));
+        int ys[] = { Sc(REC_DIV_Y), Sc(PLAY_DIV_Y), Sc(CLK_DIV_Y), Sc(FOOT_DIV_Y) };
+        for (int yy : ys) g.DrawLine(&div, (float)cx, (float)yy, (float)cright, (float)yy);
+        IconCircle(g, (float)(stX + dotR), (float)stCy, (float)dotR, GP(stDot));
     }
 
-    int ix = Sc(LEFT_X + 18);
-    int pix = Sc(RIGHT_X + 18);
-
-    TextLine(hdc, L"FLOW", Sc(PAD), Sc(9), g_fonts.wordmark, TEXT_PRIMARY);
-    TextLine(hdc, L"Macro recorder & auto-clicker", Sc(PAD), Sc(39), g_fonts.small_, TEXT_SECONDARY);
-
+    // ---- status label ----
     {
-        RECT tr = { pillX + pillPadL + pillDot + pillGap, pillY, pillX + pillW, pillY + pillH };
         HFONT o = (HFONT)SelectObject(hdc, g_fonts.pill);
         SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, stCol);
+        SetTextColor(hdc, stTextCol);
+        RECT tr = { stX + dotR * 2 + dotGap, stCy - Sc(14), cright, stCy + Sc(14) };
         DrawTextW(hdc, stTxt, -1, &tr, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
         SelectObject(hdc, o);
     }
 
-    TextLine(hdc, L"RECORD",       ix,  Sc(REC_TOP + 14), g_fonts.cardTitle, TEXT_FAINT);
-    TextLine(hdc, L"AUTO-CLICKER", ix,  Sc(CLK_TOP + 14), g_fonts.cardTitle, TEXT_FAINT);
-    TextLine(hdc, L"PLAYBACK",     pix, Sc(REC_TOP + 14), g_fonts.cardTitle, TEXT_FAINT);
+    // ---- header ----
+    TextLine(hdc, L"FLOW", cx, Sc(WORDMARK_Y), g_fonts.wordmark, TEXT_PRIMARY);
+    TextLine(hdc, L"Macro recorder & auto-clicker", cx, Sc(TAGLINE_Y), g_fonts.small_, TEXT_SECONDARY);
 
+    // ---- section labels ----
+    TextLine(hdc, L"RECORD",       cx, Sc(REC_LABEL_Y),  g_fonts.cardTitle, TEXT_FAINT);
+    TextLine(hdc, L"PLAYBACK",     cx, Sc(PLAY_LABEL_Y), g_fonts.cardTitle, TEXT_FAINT);
+    TextLine(hdc, L"AUTO-CLICKER", cx, Sc(CLK_LABEL_Y),  g_fonts.cardTitle, TEXT_FAINT);
+
+    // ---- record info / empty state ----
     {
-        wchar_t cap[64];
         unsigned long n = g_app.engine ? (unsigned long)g_app.engine->GetEventCount() : 0UL;
-        if (n > 0) swprintf(cap, 64, L"%lu events captured", n);
-        else       wcscpy(cap, L"No recording yet");
-        TextLine(hdc, cap, ix, Sc(REC_TOP + REC_H - 30), g_fonts.small_, TEXT_SECONDARY);
+        if (n > 0) {
+            DWORD ms = g_app.engine->GetDurationMs();
+            double s = ms / 1000.0;
+            wchar_t dur[24];
+            if (s < 60.0) swprintf(dur, 24, L"%.1fs", s);
+            else          swprintf(dur, 24, L"%dm %02ds", (int)(s / 60), (int)s % 60);
+            wchar_t cap[64];
+            swprintf(cap, 64, L"%lu events   ·   %s", n, dur);
+            TextLine(hdc, cap, cx, Sc(REC_INFO_Y), g_fonts.mono, TEXT_SECONDARY);
+        } else {
+            TextLine(hdc, L"No macro yet — record one, or open a saved .rec file.",
+                     cx, Sc(REC_INFO_Y), g_fonts.small_, TEXT_FAINT);
+        }
     }
 
-    TextLine(hdc, L"Interval (ms)", ix, Sc(CLK_TOP + 84), g_fonts.body, TEXT_SECONDARY);
+    // ---- playback inline labels ----
+    TextLine(hdc, L"Speed", cx, Sc(SPEED_ROW_Y), g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"×", cx + Sc(116), Sc(SPEED_ROW_Y), g_fonts.body, TEXT_FAINT);
+    TextLine(hdc, L"Loops", cx + Sc(150), Sc(SPEED_ROW_Y), g_fonts.body, TEXT_SECONDARY);
+
+    // ---- runtime estimate ----
+    if (g_app.engine && g_app.engine->GetEventCount() > 0) {
+        double durS = g_app.engine->GetDurationMs() / 1000.0;
+        double sp = g_app.playbackSpeed > 0 ? g_app.playbackSpeed : 1.0;
+        wchar_t rt[64];
+        if (g_app.continuous) {
+            swprintf(rt, 64, L"Est. runtime   ·   continuous");
+        } else {
+            double tot = durS * g_app.loopCount / sp;
+            if (tot < 60.0) swprintf(rt, 64, L"Est. runtime   ·   %.1fs", tot);
+            else            swprintf(rt, 64, L"Est. runtime   ·   %dm %02ds", (int)(tot / 60), (int)tot % 60);
+        }
+        TextLine(hdc, rt, cx, Sc(RUNTIME_Y), g_fonts.small_, TEXT_FAINT);
+    }
+
+    // ---- auto-clicker inline labels ----
+    TextLine(hdc, L"Interval", cx, Sc(CLK_LBL2_Y), g_fonts.body, TEXT_SECONDARY);
     {
         wchar_t cps[48];
         int per = g_app.clickInterval > 0 ? g_app.clickInterval : 1;
-        swprintf(cps, 48, L"≈ %d clicks/sec", (1000 + per / 2) / per);
-        TextLine(hdc, cps, ix + Sc(110), Sc(CLK_TOP + 111), g_fonts.small_, TEXT_FAINT);
+        swprintf(cps, 48, L"ms    ≈ %d clicks/sec", (1000 + per / 2) / per);
+        TextLine(hdc, cps, cx + Sc(160), Sc(CLK_LBL2_Y), g_fonts.small_, TEXT_FAINT);
     }
-
-    TextLine(hdc, L"Speed", pix, Sc(REC_TOP + 88),  g_fonts.body, TEXT_SECONDARY);
-    TextLine(hdc, L"×", pix + Sc(100), Sc(REC_TOP + 112), g_fonts.body, TEXT_SECONDARY);
-    TextLine(hdc, L"Loops", pix, Sc(REC_TOP + 150), g_fonts.body, TEXT_SECONDARY);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1260,19 +1342,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 case BTN_TOGGLE_CLICKER: ToggleAutoClicker(); break;
 
                 case CHK_CONTINUOUS:
-                    g_app.continuous =
-                        (SendDlgItemMessageW(hwnd, CHK_CONTINUOUS, BM_GETCHECK, 0, 0) == BST_CHECKED);
-                    UpdateStatusDisplay();
+                    g_app.continuous = !g_app.continuous;
+                    InvalidateRect(GetDlgItem(hwnd, CHK_CONTINUOUS), NULL, FALSE);
+                    UpdateStatusDisplay();   // runtime estimate depends on it
                     break;
 
                 case CHK_HUMANIZE:
-                    g_app.humanizationEnabled =
-                        (SendDlgItemMessageW(hwnd, CHK_HUMANIZE, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                    g_app.humanizationEnabled = !g_app.humanizationEnabled;
                     if (g_app.engine) {
                         g_app.engine->EnableHumanization(g_app.humanizationEnabled);
                         if (g_app.humanizationEnabled)
                             g_app.engine->ConfigureHumanization(0.0, g_app.humanizationStdDev);
                     }
+                    InvalidateRect(GetDlgItem(hwnd, CHK_HUMANIZE), NULL, FALSE);
                     break;
 
                 case MENU_CUSTOMIZE_HOTKEYS: ShowCustomizeHotkeysDialog(hwnd); break;
@@ -1294,7 +1376,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_DRAWITEM: {
             DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
             if (dis->CtlType == ODT_BUTTON) {
-                DrawFlowButton(dis);
+                if (dis->CtlID == CHK_CONTINUOUS)
+                    DrawToggle(dis, L"Loop continuously", g_app.continuous);
+                else if (dis->CtlID == CHK_HUMANIZE)
+                    DrawToggle(dis, L"Humanize timing", g_app.humanizationEnabled);
+                else
+                    DrawFlowButton(dis);
                 return TRUE;
             }
             break;
@@ -1338,52 +1425,44 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 void CreateControls(HWND hwnd) {
     HINSTANCE hi = GetModuleHandle(NULL);
-    int ix = Sc(LEFT_X + 18);
-    int pix = Sc(RIGHT_X + 18);
-    int innerW = Sc(COL_W - 36);
-    int eW = Sc(92), eH = Sc(28);
+    int cx = Sc(CONTENT_X);
+    int contentW = Sc(CONTENT_W);
 
-    // Primary action buttons (owner-draw)
-    CreateFlowButton(hwnd, BTN_RECORD, ix, Sc(REC_TOP + 38), innerW, Sc(42), L"Start / stop recording (F8)");
-    CreateFlowButton(hwnd, BTN_PLAY, pix, Sc(REC_TOP + 38), innerW, Sc(42), L"Start / stop playback (Ctrl+Shift+Alt+P)");
-    CreateFlowButton(hwnd, BTN_TOGGLE_CLICKER, ix, Sc(CLK_TOP + 38), innerW, Sc(42), L"Toggle auto-clicker (F6)");
+    // Hero (primary) buttons — full-width, tall
+    CreateFlowButton(hwnd, BTN_RECORD, cx, Sc(REC_BTN_Y), contentW, Sc(HERO_H), L"Start / stop recording");
+    CreateFlowButton(hwnd, BTN_PLAY, cx, Sc(PLAY_BTN_Y), contentW, Sc(HERO_H), L"Start / stop playback");
+    CreateFlowButton(hwnd, BTN_TOGGLE_CLICKER, cx, Sc(CLK_BTN_Y), contentW, Sc(HERO_H), L"Start / stop the auto-clicker");
 
-    // Inline edit fields
-    auto makeEdit = [&](int id, int x, int y, DWORD extra) -> HWND {
+    // Inline numeric edits (monospace)
+    auto makeEdit = [&](int id, int x, int y, int w, DWORD extra) -> HWND {
         HWND e = CreateWindowExW(0, L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL | ES_CENTER | extra,
-            x, y, eW, eH, hwnd, (HMENU)(LONG_PTR)id, hi, NULL);
-        SendMessageW(e, WM_SETFONT, (WPARAM)g_fonts.value, TRUE);
+            x, y, w, Sc(30), hwnd, (HMENU)(LONG_PTR)id, hi, NULL);
+        SendMessageW(e, WM_SETFONT, (WPARAM)g_fonts.mono, TRUE);
         return e;
     };
-    makeEdit(EDIT_SPEED,    pix, Sc(REC_TOP + 108), 0);
-    makeEdit(EDIT_LOOPS,    pix, Sc(REC_TOP + 170), ES_NUMBER);
-    makeEdit(EDIT_INTERVAL, ix,  Sc(CLK_TOP + 106), ES_NUMBER);
+    makeEdit(EDIT_SPEED,    cx + Sc(54),  Sc(SPEED_EDIT_Y), Sc(56), 0);
+    makeEdit(EDIT_LOOPS,    cx + Sc(206), Sc(SPEED_EDIT_Y), Sc(56), ES_NUMBER);
+    makeEdit(EDIT_INTERVAL, cx + Sc(80),  Sc(CLK_EDIT_Y),   Sc(70), ES_NUMBER);
 
-    // Checkboxes
-    HWND c1 = CreateWindowExW(0, L"BUTTON", L"Loop continuously",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-        pix, Sc(REC_TOP + 210), Sc(220), Sc(22), hwnd, (HMENU)CHK_CONTINUOUS, hi, NULL);
-    SendMessageW(c1, WM_SETFONT, (WPARAM)g_fonts.body, TRUE);
+    // Toggle switches (owner-draw)
+    CreateFlowButton(hwnd, CHK_CONTINUOUS, cx, Sc(TOG1_Y), contentW, Sc(30), L"Repeat playback until stopped");
+    CreateFlowButton(hwnd, CHK_HUMANIZE, cx, Sc(TOG2_Y), contentW, Sc(30), L"Add small random timing variance");
 
-    HWND c2 = CreateWindowExW(0, L"BUTTON", L"Humanize timing",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-        pix, Sc(REC_TOP + 236), Sc(220), Sc(22), hwnd, (HMENU)CHK_HUMANIZE, hi, NULL);
-    SendMessageW(c2, WM_SETFONT, (WPARAM)g_fonts.body, TRUE);
+    // Footer: file ops left, Settings + Stop All right
+    int footY = Sc(FOOT_Y);
+    CreateFlowButton(hwnd, BTN_OPEN, cx, footY, Sc(92), Sc(FOOT_H), L"Open a saved macro (.rec)");
+    CreateFlowButton(hwnd, BTN_SAVE, cx + Sc(100), footY, Sc(92), Sc(FOOT_H), L"Save the current macro");
+    int stopW = Sc(116), stopX = Sc(CLIENT_W - PAD) - stopW;
+    int setW = Sc(96), setX = stopX - Sc(8) - setW;
+    CreateFlowButton(hwnd, BTN_SETTINGS, setX, footY, setW, Sc(FOOT_H), L"Hotkeys, always-on-top, about");
+    CreateFlowButton(hwnd, BTN_STOP_ALL, stopX, footY, stopW, Sc(FOOT_H), L"Stop everything");
 
-    // Footer buttons
-    CreateFlowButton(hwnd, BTN_OPEN, Sc(LEFT_X), Sc(FOOTER_TOP), Sc(120), Sc(42), L"Open a saved macro (.rec)");
-    CreateFlowButton(hwnd, BTN_SAVE, Sc(LEFT_X + 128), Sc(FOOTER_TOP), Sc(120), Sc(42), L"Save the current macro");
-    CreateFlowButton(hwnd, BTN_SETTINGS, Sc(314), Sc(FOOTER_TOP), Sc(110), Sc(42), L"Hotkeys, always-on-top, about");
-    CreateFlowButton(hwnd, BTN_STOP_ALL, Sc(432), Sc(FOOTER_TOP), Sc(CLIENT_W - PAD - 432), Sc(42), L"Stop everything (Pause)");
-
-    // Initialize control values from state
+    // Initialize edit values from state
     wchar_t buf[32];
     swprintf(buf, 32, L"%g", g_app.playbackSpeed); SetDlgItemTextW(hwnd, EDIT_SPEED, buf);
     swprintf(buf, 32, L"%d", g_app.loopCount);      SetDlgItemTextW(hwnd, EDIT_LOOPS, buf);
     swprintf(buf, 32, L"%d", g_app.clickInterval);  SetDlgItemTextW(hwnd, EDIT_INTERVAL, buf);
-    SendDlgItemMessageW(hwnd, CHK_CONTINUOUS, BM_SETCHECK, g_app.continuous ? BST_CHECKED : BST_UNCHECKED, 0);
-    SendDlgItemMessageW(hwnd, CHK_HUMANIZE,   BM_SETCHECK, g_app.humanizationEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
 }
 
 // ============================================================================
@@ -1426,13 +1505,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     };
-    g_fonts.wordmark  = mkFont(Sc(30), FW_BOLD);
-    g_fonts.cardTitle = mkFont(Sc(13), FW_BOLD);
+    g_fonts.wordmark  = mkFont(Sc(28), FW_BOLD);
+    g_fonts.cardTitle = mkFont(Sc(12), FW_BOLD);   // small tracked section labels
     g_fonts.button    = mkFont(Sc(17), FW_SEMIBOLD);
     g_fonts.body      = mkFont(Sc(16), FW_NORMAL);
     g_fonts.value     = mkFont(Sc(17), FW_SEMIBOLD);
     g_fonts.pill      = mkFont(Sc(15), FW_SEMIBOLD);
     g_fonts.small_    = mkFont(Sc(14), FW_NORMAL);
+    g_fonts.mono      = CreateFontW(Sc(17), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(WNDCLASSEXW);
@@ -1518,6 +1600,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     DeleteObject(g_fonts.value);
     DeleteObject(g_fonts.pill);
     DeleteObject(g_fonts.small_);
+    DeleteObject(g_fonts.mono);
     Gdiplus::GdiplusShutdown(gdiplusToken);
 
     return (int)msg.wParam;
