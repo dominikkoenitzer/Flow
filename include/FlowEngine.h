@@ -328,6 +328,14 @@ public:
      */
     size_t GetEventCount() const { return recordedEvents.size(); }
 
+    /**
+     * @brief Get the duration of the recorded macro in milliseconds
+     * @return Timestamp of the last recorded event (0 if empty)
+     */
+    DWORD GetDurationMs() const {
+        return recordedEvents.empty() ? 0 : recordedEvents.back().timestamp;
+    }
+
     // ===== Playback Control =====
     
     /**
