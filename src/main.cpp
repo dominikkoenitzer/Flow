@@ -525,6 +525,31 @@ static void DrawToggle(DRAWITEMSTRUCT* dis, const wchar_t* label, bool on) {
     g.FillEllipse(&knob, kx - kr, ky - kr, kr * 2, kr * 2);
 }
 
+// A read-only key field rendered as a soft input pill (matches the main window
+// number fields): hairline at rest, lifted fill + accent ring when focused.
+static void DrawKeyField(DRAWITEMSTRUCT* dis, const wchar_t* keyText) {
+    HDC hdc = dis->hDC;
+    RECT rc = dis->rcItem;
+    int w = rc.right - rc.left, h = rc.bottom - rc.top;
+    bool foc = (dis->itemState & ODS_FOCUS) != 0;
+
+    HBRUSH bb = CreateSolidBrush(BG_PRIMARY);
+    FillRect(hdc, &rc, bb);
+    DeleteObject(bb);
+    {
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        FillRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, Scf(8.0f), GP(foc ? TRACK_HOVER : TRACK_BG));
+        StrokeRound(g, 0.5f, 0.5f, (float)w - 1, (float)h - 1, Scf(8.0f),
+                    GP(foc ? ACCENT_PRIMARY : BORDER_DEFAULT), foc ? Scf(1.6f) : Scf(1.0f));
+    }
+    HFONT old = (HFONT)SelectObject(hdc, g_fonts.mono);
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, TEXT_PRIMARY);
+    DrawTextW(hdc, keyText, -1, &rc, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(hdc, old);
+}
+
 // A centered, rounded dialog button (primary = filled accent, else ghost).
 // Dialogs sit on a BG_PRIMARY surface.
 static void DrawDlgButton(DRAWITEMSTRUCT* dis, const wchar_t* label, bool primary) {
@@ -807,17 +832,8 @@ LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM 
     switch (msg) {
         case WM_CTLCOLORSTATIC: {
             static HBRUSH bgB = CreateSolidBrush(BG_PRIMARY);
-            static HBRUSH whiteB = CreateSolidBrush(BG_ELEVATED);
-            HWND ctl = (HWND)lParam;
-            int id = GetDlgCtrlID(ctl);
+            int id = GetDlgCtrlID((HWND)lParam);
             HDC dc = (HDC)wParam;
-            bool isKeyField = (id == IDC_HOTKEY_RECORD || id == IDC_HOTKEY_PLAYBACK ||
-                               id == IDC_HOTKEY_CLICKER || id == IDC_HOTKEY_STOP);
-            if (isKeyField) {                       // read-only key edits → white input
-                SetTextColor(dc, TEXT_PRIMARY);
-                SetBkColor(dc, BG_ELEVATED);
-                return (INT_PTR)whiteB;
-            }
             bool muted = (id == IDC_HK_SUBTITLE || id == IDC_HK_INSTRUCTION);
             SetTextColor(dc, muted ? TEXT_SECONDARY : TEXT_PRIMARY);
             SetBkColor(dc, BG_PRIMARY);
@@ -826,9 +842,18 @@ LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM 
 
         case WM_DRAWITEM: {
             DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
-            if (dis->CtlID == IDC_HOTKEY_OK)     { DrawDlgButton(dis, L"Save Changes", true);  return TRUE; }
-            if (dis->CtlID == IDC_HOTKEY_CANCEL) { DrawDlgButton(dis, L"Cancel", false);        return TRUE; }
-            break;
+            if (dis->CtlID == IDC_HOTKEY_OK)     { DrawDlgButton(dis, L"Save Changes", true); return TRUE; }
+            if (dis->CtlID == IDC_HOTKEY_CANCEL) { DrawDlgButton(dis, L"Cancel", false);       return TRUE; }
+            UINT vk = 0;
+            if (dis->CtlID == IDC_HOTKEY_RECORD)        vk = g_tempHotkeyRecord;
+            else if (dis->CtlID == IDC_HOTKEY_PLAYBACK) vk = g_tempHotkeyPlayback;
+            else if (dis->CtlID == IDC_HOTKEY_CLICKER)  vk = g_tempHotkeyClicker;
+            else if (dis->CtlID == IDC_HOTKEY_STOP)     vk = g_tempHotkeyStop;
+            else break;
+            wchar_t k[64];
+            MultiByteToWideChar(CP_ACP, 0, GetKeyName(vk, false), -1, k, 64);
+            DrawKeyField(dis, k);
+            return TRUE;
         }
 
         case WM_COMMAND:
@@ -902,22 +927,17 @@ LRESULT CALLBACK HotkeyEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                         (vk >= '0' && vk <= '9');
         
         if (validKey) {
-            // Store the hotkey based on which edit control this is
-            if (hwnd == g_hHotkeyRecordEdit) {
-                g_tempHotkeyRecord = vk;
-            } else if (hwnd == g_hHotkeyPlaybackEdit) {
-                g_tempHotkeyPlayback = vk;
-            } else if (hwnd == g_hHotkeyClickerEdit) {
-                g_tempHotkeyClicker = vk;
-            } else if (hwnd == g_hHotkeyStopEdit) {
-                g_tempHotkeyStop = vk;
-            }
-
-            // Display the key name (with modifiers for playback)
-            bool showModifiers = (hwnd == g_hHotkeyPlaybackEdit);
-            SetWindowTextA(hwnd, GetKeyName(vk, showModifiers));
+            if (hwnd == g_hHotkeyRecordEdit)        g_tempHotkeyRecord = vk;
+            else if (hwnd == g_hHotkeyPlaybackEdit) g_tempHotkeyPlayback = vk;
+            else if (hwnd == g_hHotkeyClickerEdit)  g_tempHotkeyClicker = vk;
+            else if (hwnd == g_hHotkeyStopEdit)     g_tempHotkeyStop = vk;
+            InvalidateRect(hwnd, NULL, FALSE);   // owner-draw repaints the key text
             return 0;
         }
+    }
+    // Repaint the focus ring as focus moves between fields.
+    if (msg == WM_SETFOCUS || msg == WM_KILLFOCUS) {
+        InvalidateRect(hwnd, NULL, FALSE);
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
@@ -969,42 +989,40 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(BG_PRIMARY));
 
     // Layout in design units (scaled via Sc).
-    const int W = 480, H = 452, padX = 28;
-    const int rowTop = 104, rowH = 56, labelW = 168, editX = 200, editW = W - editX - padX, editH = 40;
+    const int W = 460, H = 446, padX = 28;
+    const int rowTop = 104, rowH = 54, editW = 150, editH = 38;
+    const int editX = W - padX - editW;   // right-aligned key fields
 
     HWND title = CreateWindowExW(0, L"STATIC", L"Customize Hotkeys",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(20), Sc(W - 2 * padX), Sc(40),
+        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(20), Sc(W - 2 * padX), Sc(36),
         hDlg, NULL, hi, NULL);
     SendMessageW(title, WM_SETFONT, (WPARAM)g_fonts.wordmark, TRUE);
 
     HWND sub = CreateWindowExW(0, L"STATIC",
-        L"Click a field, then press your key.  F1–F12, A–Z, 0–9.",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(66), Sc(W - 2 * padX), Sc(24),
+        L"Click a field, then press a key to rebind it.",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(62), Sc(W - 2 * padX), Sc(24),
         hDlg, (HMENU)IDC_HK_SUBTITLE, hi, NULL);
     SendMessageW(sub, WM_SETFONT, (WPARAM)g_fonts.small_, TRUE);
 
-    auto makeRow = [&](const wchar_t* text, UINT vk, bool mods, int editId, int y) -> HWND {
+    auto makeRow = [&](const wchar_t* text, int editId, int y) -> HWND {
         HWND lab = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT,
-            Sc(padX), Sc(y + 11), Sc(labelW), Sc(24), hDlg, NULL, hi, NULL);
+            Sc(padX), Sc(y + 10), Sc(editX - padX), Sc(24), hDlg, NULL, hi, NULL);
         SendMessageW(lab, WM_SETFONT, (WPARAM)g_fonts.body, TRUE);
-        const char* kn = GetKeyName(vk, mods);
-        wchar_t wkn[64]; MultiByteToWideChar(CP_ACP, 0, kn, -1, wkn, 64);
-        HWND e = CreateWindowExW(0, L"EDIT", wkn,
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_READONLY | ES_CENTER,
+        HWND e = CreateWindowExW(0, L"BUTTON", L"",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
             Sc(editX), Sc(y), Sc(editW), Sc(editH), hDlg, (HMENU)(LONG_PTR)editId, hi, NULL);
-        SendMessageW(e, WM_SETFONT, (WPARAM)g_fonts.value, TRUE);
         SetWindowSubclass(e, HotkeyEditProc, 0, 0);
         return e;
     };
 
-    g_hHotkeyRecordEdit   = makeRow(L"Start / stop recording", g_app.hotkeyRecord, false, IDC_HOTKEY_RECORD,   rowTop);
-    g_hHotkeyPlaybackEdit = makeRow(L"Start / stop playback",  g_app.hotkeyPlayback, true, IDC_HOTKEY_PLAYBACK, rowTop + rowH);
-    g_hHotkeyClickerEdit  = makeRow(L"Toggle auto-clicker",    g_app.hotkeyClicker, false, IDC_HOTKEY_CLICKER,  rowTop + 2 * rowH);
-    g_hHotkeyStopEdit     = makeRow(L"Stop all activities",    g_app.hotkeyStop, false, IDC_HOTKEY_STOP,        rowTop + 3 * rowH);
+    g_hHotkeyRecordEdit   = makeRow(L"Start / stop recording", IDC_HOTKEY_RECORD,   rowTop);
+    g_hHotkeyPlaybackEdit = makeRow(L"Start / stop playback",  IDC_HOTKEY_PLAYBACK, rowTop + rowH);
+    g_hHotkeyClickerEdit  = makeRow(L"Toggle auto-clicker",    IDC_HOTKEY_CLICKER,  rowTop + 2 * rowH);
+    g_hHotkeyStopEdit     = makeRow(L"Stop all activities",    IDC_HOTKEY_STOP,     rowTop + 3 * rowH);
 
     HWND instr = CreateWindowExW(0, L"STATIC",
-        L"Playback also requires Ctrl+Shift+Alt. Changes apply on save.",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(rowTop + 4 * rowH + 6), Sc(W - 2 * padX), Sc(24),
+        L"Supported keys: F1–F12, A–Z, 0–9.   Changes apply on Save.",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(rowTop + 4 * rowH + 4), Sc(W - 2 * padX), Sc(24),
         hDlg, (HMENU)IDC_HK_INSTRUCTION, hi, NULL);
     SendMessageW(instr, WM_SETFONT, (WPARAM)g_fonts.small_, TRUE);
 
@@ -1108,8 +1126,8 @@ void ShowAboutDialog(HWND hwnd) {
 
     const int W = 440, H = 372, padX = 28;
 
-    HWND title = CreateWindowExW(0, L"STATIC", L"FLOW", WS_CHILD | WS_VISIBLE | SS_LEFT,
-        Sc(padX), Sc(22), Sc(W - 2 * padX), Sc(40), hDlg, NULL, hi, NULL);
+    HWND title = CreateWindowExW(0, L"STATIC", L"Flow", WS_CHILD | WS_VISIBLE | SS_LEFT,
+        Sc(padX), Sc(22), Sc(W - 2 * padX), Sc(34), hDlg, NULL, hi, NULL);
     SendMessageW(title, WM_SETFONT, (WPARAM)g_fonts.wordmark, TRUE);
 
     HWND sub = CreateWindowExW(0, L"STATIC", L"Flexible Low-latency Operations Workflow",
