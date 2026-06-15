@@ -74,14 +74,14 @@ The `-static` flag is required so the resulting exe carries the MinGW runtime
 
 Releases are **named, not numbered** — each one gets a codename. This first release is **Firefly**.
 
-Releases are fully automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). Push a tag with the release name and the workflow builds, verifies the binary is self-contained, and publishes a **draft** GitHub Release titled *FLOW — "Firefly"* with the exe, zip, and checksums attached:
+Releases are fully automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). Push a tag with the release name and the workflow builds, verifies the binary is self-contained, and **publishes** a GitHub Release titled *FLOW — "Firefly"* with the exe, zip, and checksums attached:
 
 ```powershell
-git tag firefly
-git push origin firefly
+git tag Firefly
+git push origin Firefly
 ```
 
-Then open the draft on the Releases page, review it, and click **Publish**. The next release simply gets a new name (e.g. `git tag mayfly`).
+The release goes live automatically once CI passes (the build is verified self-contained before anything is published). The next release simply gets a new name (e.g. `git tag Mayfly`).
 
 To build the release artifacts locally without GitHub, run [`scripts/package.ps1`](scripts/package.ps1).
 
