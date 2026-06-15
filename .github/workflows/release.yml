@@ -87,12 +87,12 @@ jobs:
           (cd dist && zip -r "$DIST.zip" "$DIST")
           (cd dist && sha256sum "$DIST.zip" "$DIST/FLOW.exe" | tee "SHA256SUMS-$VER.txt")
 
-      - name: Create GitHub Release (draft)
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: FLOW — "${{ steps.ver.outputs.display }}"
           tag_name: ${{ steps.ver.outputs.version }}
-          draft: true
+          draft: false
           generate_release_notes: true
           files: |
             dist/FLOW-${{ steps.ver.outputs.version }}-win64.zip
