@@ -686,8 +686,18 @@ void ToggleRecording(HWND hwnd) {
         SetWindowTextA(hwnd, "FLOW");
     } else {
         g_app.engine->StartRecording();
-        g_app.isRecording = true;
-        SetWindowTextA(hwnd, "FLOW - Recording...");
+        // StartRecording installs the global hooks on demand; if that fails it
+        // stays inactive. Mirror the engine's real state instead of optimistically
+        // claiming "Recording", so the UI can't lie about what's happening.
+        g_app.isRecording = g_app.engine->IsRecordingActive();
+        if (g_app.isRecording) {
+            SetWindowTextA(hwnd, "FLOW - Recording...");
+        } else {
+            MessageBoxW(hwnd,
+                L"Couldn't start recording — input hooks failed to install.\n\n"
+                L"Make sure FLOW is running as Administrator.",
+                L"Recording", MB_OK | MB_ICONWARNING);
+        }
     }
     UpdateStatusDisplay();
     InvalidateRect(hwnd, NULL, TRUE);
@@ -1576,7 +1586,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     ULONG_PTR gdiplusToken = 0;
-    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+    if (Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL) != Gdiplus::Ok) {
+        // The entire UI is GDI+-rendered; without it the window can't draw, so
+        // fail loudly instead of showing a broken/blank window.
+        MessageBoxW(NULL, L"Failed to initialize graphics (GDI+).", L"Error", MB_OK | MB_ICONERROR);
+        return 1;
+    }
 
     INITCOMMONCONTROLSEX icex = {};
     icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
