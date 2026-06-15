@@ -57,42 +57,24 @@ inline bool CheckDebuggerWindows() {
 }
 
 /**
- * @brief Check for timing attacks (debugger stepping detection)
- * @return true if timing attack detected
- */
-inline bool CheckTimingAttack() {
-    DWORD start = GetTickCount();
-    
-    // Simple operation
-    volatile int x = 0;
-    for (int i = 0; i < 100; i++) {
-        x += i;
-    }
-    
-    DWORD end = GetTickCount();
-    
-    // If this takes more than 50ms, likely being debugged
-    return (end - start) > 50;
-}
-
-/**
  * @brief Initialize all protection checks
  * @return true if any protection triggered (debugger detected)
+ *
+ * @note A wall-clock timing check was intentionally removed: a brief OS
+ *       scheduling stall on a busy machine (or during the first-launch AV scan)
+ *       could exceed its threshold and silently terminate the app for a
+ *       legitimate user. The remaining API/window checks have no false positives.
  */
 inline bool InitializeProtection() {
     // Combine all checks
     if (IsDebuggerPresent_Check()) {
         return true;
     }
-    
+
     if (CheckDebuggerWindows()) {
         return true;
     }
-    
-    if (CheckTimingAttack()) {
-        return true;
-    }
-    
+
     return false;
 }
 
