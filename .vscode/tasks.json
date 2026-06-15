@@ -34,6 +34,7 @@
                 "-lgdi32",
                 "-lcomctl32",
                 "-lgdiplus",
+                "-static",
                 "-static-libgcc",
                 "-static-libstdc++"
             ],

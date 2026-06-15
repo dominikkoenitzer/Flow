@@ -4,3 +4,9 @@
 #define IDI_APPICON 101
 
 IDI_APPICON ICON "Firefly-Flow.ico"
+
+// Application manifest: requests Administrator elevation (required for the
+// global low-level hooks), enables Common-Controls v6 visual styles, and
+// declares Per-Monitor V2 DPI awareness. Without this embedded, a downloaded
+// exe launches un-elevated and InstallHooks() fails for end users.
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "FLOW.manifest"
