@@ -124,6 +124,16 @@ public:
      * @note Uses CPU cycles - suitable for short, precise delays only
      */
     static void PreciseSleep(DWORD microseconds);
+
+    /**
+     * @brief Wait a whole-millisecond duration with low jitter and low CPU.
+     * @param milliseconds Duration to wait
+     * @note Releases the CPU with Sleep() for all but the final ~2ms, then
+     *       busy-waits the remainder on the performance counter. Unlike a full
+     *       busy-wait this does not peg a CPU core for long intervals, while
+     *       still keeping sub-millisecond accuracy for clicker/playback timing.
+     */
+    static void PreciseDelayMs(DWORD milliseconds);
 };
 
 // ============================================================================
