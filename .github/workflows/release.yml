@@ -49,7 +49,7 @@ jobs:
           g++ -std=c++17 -O3 -DNDEBUG -mwindows -I include \
             -o build/FLOW.exe \
             src/main.cpp src/FlowEngine.cpp build/resource.o \
-            -luser32 -lgdi32 -lcomctl32 -lgdiplus \
+            -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 \
             -static -static-libgcc -static-libstdc++
 
       - name: Verify the binary is self-contained

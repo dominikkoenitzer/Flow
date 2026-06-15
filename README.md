@@ -46,6 +46,12 @@ No Visual C++ redistributable, no MinGW runtime, nothing else — the binary is 
 
 All hotkeys are customizable in **Settings → Customize Hotkeys**.
 
+## Tips
+
+- **Drag & drop** a `.rec` file onto the window to load it instantly.
+- Turn on **Settings → Reopen Last Macro on Launch** to have your last macro ready every time you start FLOW.
+- FLOW **remembers its window position** and reopens where you left it.
+
 ## Build from source
 
 The toolchain is **MinGW-w64 g++** (C++17). With MinGW on your `PATH`:

@@ -88,6 +88,7 @@ $CompileArgs = @(
     "-lgdi32",
     "-lcomctl32",
     "-lgdiplus",
+    "-lshell32",
     # -static bundles libwinpthread/libstdc++/libgcc INTO the exe so it runs on
     # machines without MinGW. Only system DLLs (user32, gdi32, ...) stay external.
     "-static",
