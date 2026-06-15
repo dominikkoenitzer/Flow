@@ -1,0 +1,126 @@
+name: Release
+
+# Builds a fully static, self-contained Windows binary with MinGW and publishes
+# it as a named GitHub Release. Triggered by pushing a tag (e.g. firefly).
+on:
+  push:
+    tags:
+      # Releases are named, not numbered (Firefly, ...) — any pushed tag is a release.
+      - '*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release name for a manual run (e.g. firefly)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MinGW-w64 (MSYS2)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-binutils
+            zip
+
+      - name: Build (Release, fully static)
+        run: |
+          mkdir -p build
+          windres resource.rc -O coff -o build/resource.o
+          g++ -std=c++17 -O3 -DNDEBUG -mwindows -I include \
+            -o build/FLOW.exe \
+            src/main.cpp src/FlowEngine.cpp build/resource.o \
+            -luser32 -lgdi32 -lcomctl32 -lgdiplus \
+            -static -static-libgcc -static-libstdc++
+
+      - name: Verify the binary is self-contained
+        run: |
+          echo "== DLL imports =="
+          objdump -p build/FLOW.exe | grep -i "DLL Name"
+          # Fail the release if any MinGW runtime DLL leaked into the imports.
+          if objdump -p build/FLOW.exe | grep -iE "libwinpthread|libstdc\+\+|libgcc|libgomp"; then
+            echo "::error::Non-system DLL dependency found - build is NOT static. Refusing to release."
+            exit 1
+          fi
+          # Fail if the admin-elevation manifest did not get embedded.
+          if ! grep -aq "requireAdministrator" build/FLOW.exe; then
+            echo "::error::Manifest not embedded (no requireAdministrator). Refusing to release."
+            exit 1
+          fi
+          echo "OK: self-contained + manifest embedded."
+
+      - name: Determine release name
+        id: ver
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VER="${{ github.ref_name }}"
+          else
+            VER="${{ github.event.inputs.tag }}"
+          fi
+          # Title-case the tag for the display title (firefly -> Firefly).
+          DISPLAY="$(echo "$VER" | sed -E 's/(^|[ _-])([a-z])/\1\u\2/g')"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "display=$DISPLAY" >> "$GITHUB_OUTPUT"
+          echo "Releasing: $DISPLAY (tag $VER)"
+
+      - name: Package
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          DIST="FLOW-$VER-win64"
+          mkdir -p "dist/$DIST"
+          cp build/FLOW.exe "dist/$DIST/"
+          cp README.md "dist/$DIST/" 2>/dev/null || true
+          cp LICENSE* "dist/$DIST/" 2>/dev/null || true
+          (cd dist && zip -r "$DIST.zip" "$DIST")
+          (cd dist && sha256sum "$DIST.zip" "$DIST/FLOW.exe" | tee "SHA256SUMS-$VER.txt")
+
+      - name: Create GitHub Release (draft)
+        uses: softprops/action-gh-release@v2
+        with:
+          name: FLOW — ${{ steps.ver.outputs.display }}
+          tag_name: ${{ steps.ver.outputs.version }}
+          draft: true
+          generate_release_notes: true
+          files: |
+            dist/FLOW-${{ steps.ver.outputs.version }}-win64.zip
+            dist/FLOW-${{ steps.ver.outputs.version }}-win64/FLOW.exe
+            dist/SHA256SUMS-${{ steps.ver.outputs.version }}.txt
+          body: |
+            ## FLOW — ${{ steps.ver.outputs.display }}
+
+            High-speed input automation for Windows — record/replay macros and a low-latency auto-clicker.
+
+            ### Install
+            1. Download **`FLOW.exe`** (or the `.zip`) below.
+            2. **Run as Administrator** — FLOW needs elevation for global input hooks. The exe requests it automatically (you'll see a UAC prompt).
+            3. If Windows SmartScreen shows *"Windows protected your PC"*: click **More info -> Run anyway**. The app is unsigned; verify the SHA-256 below if you want to be sure.
+
+            ### Requirements
+            - Windows 10 or 11 (64-bit). No runtime/dependencies to install — the binary is fully self-contained.
+
+            ### Default hotkeys
+            | Action | Key |
+            |---|---|
+            | Record | F8 |
+            | Playback | F9 |
+            | Auto-clicker | F6 |
+            | Stop all | Pause |
+
+            ### Verify your download
+            Compare against `SHA256SUMS-${{ steps.ver.outputs.version }}.txt`:
+            ```powershell
+            Get-FileHash .\FLOW.exe -Algorithm SHA256
+            ```
