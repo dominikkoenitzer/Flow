@@ -542,16 +542,35 @@ bool FlowEngine::LoadMacro(const std::wstring& filename) {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) return false;
 
+    // Measure the file so we can sanity-check the declared event count.
+    file.seekg(0, std::ios::end);
+    const std::streamoff fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    const std::streamoff headerSize =
+        4 + static_cast<std::streamoff>(sizeof(size_t));
+    if (fileSize < headerSize) return false;  // too small to be valid
+
     // Verify magic header
     char magic[4];
     file.read(magic, 4);
-    if (magic[0] != 'F' || magic[1] != 'L' || magic[2] != 'O' || magic[3] != 'W') {
+    if (!file || magic[0] != 'F' || magic[1] != 'L' || magic[2] != 'O' || magic[3] != 'W') {
         return false;
     }
 
     // Read event count
     size_t count = 0;
     file.read(reinterpret_cast<char*>(&count), sizeof(count));
+    if (!file) return false;
+
+    // Reject a count that can't fit in the remaining bytes. Without this, a
+    // corrupt/truncated/hostile .rec file (e.g. a partial download) could carry
+    // a garbage count and make reserve() attempt a huge allocation -> bad_alloc
+    // -> crash. This bounds the count to what the payload can actually contain.
+    const std::streamoff payload = fileSize - headerSize;
+    const size_t maxEvents =
+        static_cast<size_t>(payload / static_cast<std::streamoff>(sizeof(InputEvent)));
+    if (count > maxEvents) return false;
 
     // Load events
     std::lock_guard<std::mutex> lock(recordMutex);
@@ -561,10 +580,10 @@ bool FlowEngine::LoadMacro(const std::wstring& filename) {
     for (size_t i = 0; i < count; ++i) {
         InputEvent event;
         file.read(reinterpret_cast<char*>(&event), sizeof(InputEvent));
+        if (!file) { recordedEvents.clear(); return false; }  // truncated
         recordedEvents.push_back(event);
     }
 
-    file.close();
     return true;
 }
 
