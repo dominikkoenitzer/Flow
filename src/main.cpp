@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <shellscalingapi.h>
+#include <shellapi.h>   // drag-and-drop (DragAcceptFiles / DragQueryFile)
 #include <gdiplus.h>
 #include <string>
 #include <sstream>
@@ -114,6 +115,7 @@ enum ControlID {
     MENU_CLEAR_RECORDING = 212,
     MENU_ABOUT = 213,
     MENU_CUSTOMIZE_HOTKEYS = 214,
+    MENU_REOPEN_LAST = 215,
 
     HOTKEY_RECORD = 301,
     HOTKEY_PLAYBACK = 302,
@@ -172,6 +174,12 @@ struct AppState {
     UINT hotkeyClicker = VK_F6;
     UINT hotkeyStop = VK_PAUSE;
     UINT hotkeyModifiers = 0;  // optional modifiers for playback (none by default)
+
+    // Quality-of-life persistence
+    bool reopenLastMacro = false;   // reload the last macro on startup
+    std::wstring lastMacroPath;     // last opened / saved / dropped .rec file
+    bool hasWinPos = false;         // whether a saved window position exists
+    int winX = 0, winY = 0;         // last window top-left (restored on launch)
 } g_app;
 
 // Temporary hotkey storage for customization dialog
@@ -197,6 +205,23 @@ std::string GetSettingsPath() {
     return dir + "\\settings.cfg";
 }
 
+// UTF-8 <-> wide helpers so the (narrow) settings file can round-trip Unicode
+// file paths for the "reopen last macro" feature.
+static std::string WideToUtf8(const std::wstring& w) {
+    if (w.empty()) return {};
+    int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    std::string s((size_t)n, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), &s[0], n, nullptr, nullptr);
+    return s;
+}
+static std::wstring Utf8ToWide(const std::string& s) {
+    if (s.empty()) return {};
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0);
+    std::wstring w((size_t)n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), &w[0], n);
+    return w;
+}
+
 void SaveSettings() {
     std::ofstream f(GetSettingsPath());
     if (!f.is_open()) return;
@@ -211,6 +236,13 @@ void SaveSettings() {
     f << "hotkeyPlayback=" << g_app.hotkeyPlayback << "\n";
     f << "hotkeyClicker=" << g_app.hotkeyClicker << "\n";
     f << "hotkeyStop=" << g_app.hotkeyStop << "\n";
+    f << "reopenLastMacro=" << (g_app.reopenLastMacro ? 1 : 0) << "\n";
+    if (!g_app.lastMacroPath.empty())
+        f << "lastMacro=" << WideToUtf8(g_app.lastMacroPath) << "\n";
+    if (g_app.hasWinPos) {
+        f << "winX=" << g_app.winX << "\n";
+        f << "winY=" << g_app.winY << "\n";
+    }
 }
 
 void LoadSettings() {
@@ -258,6 +290,14 @@ void LoadSettings() {
         } else if (key == "hotkeyStop") {
             UINT v = (UINT)atoi(val.c_str());
             if (v != 0) g_app.hotkeyStop = v;
+        } else if (key == "reopenLastMacro") {
+            g_app.reopenLastMacro = (atoi(val.c_str()) != 0);
+        } else if (key == "lastMacro") {
+            g_app.lastMacroPath = Utf8ToWide(val);
+        } else if (key == "winX") {
+            g_app.winX = atoi(val.c_str()); g_app.hasWinPos = true;
+        } else if (key == "winY") {
+            g_app.winY = atoi(val.c_str()); g_app.hasWinPos = true;
         }
     }
 }
@@ -615,6 +655,8 @@ void ShowSettingsMenu(HWND hwnd) {
     AppendMenuW(hMenu, MF_STRING, MENU_CUSTOMIZE_HOTKEYS, L"Customize Hotkeys…");
     AppendMenuW(hMenu, MF_STRING | (g_app.alwaysOnTop ? MF_CHECKED : 0),
                 MENU_ALWAYS_ON_TOP, L"Always on Top");
+    AppendMenuW(hMenu, MF_STRING | (g_app.reopenLastMacro ? MF_CHECKED : 0),
+                MENU_REOPEN_LAST, L"Reopen Last Macro on Launch");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(hMenu, MF_STRING, MENU_CLEAR_RECORDING, L"Clear Recording");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
@@ -651,6 +693,7 @@ void OpenMacroFile(HWND hwnd) {
         if (!g_app.engine->LoadMacro(szFile)) {
             MessageBoxA(hwnd, "Failed to load macro file!", "Error", MB_OK | MB_ICONERROR);
         } else {
+            g_app.lastMacroPath = szFile;
             UpdateStatusDisplay();
         }
     }
@@ -671,6 +714,8 @@ void SaveMacroFile(HWND hwnd) {
     if (GetSaveFileNameW(&ofn)) {
         if (!g_app.engine->SaveMacro(szFile)) {
             MessageBoxA(hwnd, "Failed to save macro file!", "Error", MB_OK | MB_ICONERROR);
+        } else {
+            g_app.lastMacroPath = szFile;
         }
     }
 }
@@ -1459,6 +1504,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     g_app.alwaysOnTop = !g_app.alwaysOnTop;
                     UpdateWindowState();
                     break;
+                case MENU_REOPEN_LAST:
+                    g_app.reopenLastMacro = !g_app.reopenLastMacro;
+                    break;
                 case MENU_CLEAR_RECORDING:
                     if (g_app.engine) g_app.engine->ClearRecording();
                     UpdateStatusDisplay();
@@ -1500,15 +1548,38 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             else if (wParam == HOTKEY_STOP) StopAll(hwnd);
             break;
 
+        case WM_DROPFILES: {
+            // Load a .rec dropped onto the window.
+            HDROP drop = (HDROP)wParam;
+            wchar_t path[MAX_PATH] = {0};
+            if (DragQueryFileW(drop, 0, path, MAX_PATH) && g_app.engine) {
+                if (g_app.engine->LoadMacro(path)) {
+                    g_app.lastMacroPath = path;
+                    UpdateStatusDisplay();
+                } else {
+                    MessageBoxW(hwnd, L"That file isn't a valid FLOW macro (.rec).",
+                                L"Open", MB_OK | MB_ICONWARNING);
+                }
+            }
+            DragFinish(drop);
+            return 0;
+        }
+
         case WM_CLOSE:
             DestroyWindow(hwnd);
             break;
 
-        case WM_DESTROY:
+        case WM_DESTROY: {
+            // Remember the window position (ignore the -32000 minimized sentinel).
+            RECT wr; GetWindowRect(hwnd, &wr);
+            if (wr.left > -30000 && wr.top > -30000) {
+                g_app.winX = wr.left; g_app.winY = wr.top; g_app.hasWinPos = true;
+            }
             SaveSettings();
             KillTimer(hwnd, TIMER_STATUS_CHECK);
             PostQuitMessage(0);
             break;
+        }
 
         default:
             return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -1640,6 +1711,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         return 1;
     }
 
+    // Load persisted settings up front so the saved window position is available
+    // before the window is created.
+    LoadSettings();
+
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     RECT wr = { 0, 0, Sc(CLIENT_W), Sc(CLIENT_H) };
     // Use the DPI-aware frame calculation when available so the client area is
@@ -1654,24 +1729,42 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     int winW = wr.right - wr.left;
     int winH = wr.bottom - wr.top;
 
+    // Restore the saved window position, clamped to the visible desktop so it can
+    // never be stranded off-screen; otherwise center on the primary monitor.
+    int posX = (GetSystemMetrics(SM_CXSCREEN) - winW) / 2;
+    int posY = (GetSystemMetrics(SM_CYSCREEN) - winH) / 2;
+    if (g_app.hasWinPos) {
+        int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        posX = g_app.winX; posY = g_app.winY;
+        if (posX < vx) posX = vx;
+        if (posY < vy) posY = vy;
+        if (posX > vx + vw - winW) posX = vx + vw - winW;
+        if (posY > vy + vh - winH) posY = vy + vh - winH;
+    }
+
     g_app.hwnd = CreateWindowExW(0, L"FLOW_Modern", L"FLOW",
-        style,
-        (GetSystemMetrics(SM_CXSCREEN) - winW) / 2,
-        (GetSystemMetrics(SM_CYSCREEN) - winH) / 2,
-        winW, winH, NULL, NULL, hInstance, NULL);
+        style, posX, posY, winW, winH, NULL, NULL, hInstance, NULL);
 
     if (!g_app.hwnd) {
         MessageBoxW(NULL, L"Window creation failed!", L"Error", MB_OK | MB_ICONERROR);
         return 1;
     }
+    DragAcceptFiles(g_app.hwnd, TRUE);  // accept .rec files dropped onto the window
 
     g_app.engine = new FlowEngine();
 
-    // Restore persisted settings, then apply to engine + UI
-    LoadSettings();
+    // Apply persisted settings (loaded above) to the engine.
     g_app.engine->SetPlaybackSpeed(g_app.playbackSpeed);
     g_app.engine->EnableHumanization(g_app.humanizationEnabled);
     g_app.engine->ConfigureHumanization(0.0, g_app.humanizationStdDev);
+
+    // Optionally reopen the last macro so playback is ready immediately on launch.
+    if (g_app.reopenLastMacro && !g_app.lastMacroPath.empty()) {
+        g_app.engine->LoadMacro(g_app.lastMacroPath);  // silently ignored if missing
+    }
 
     // Probe input-hook access at startup so we can fail fast with a clear message
     // if not elevated. The hooks are then released immediately and re-installed
