@@ -1658,12 +1658,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_app.engine->EnableHumanization(g_app.humanizationEnabled);
     g_app.engine->ConfigureHumanization(0.0, g_app.humanizationStdDev);
 
+    // Probe input-hook access at startup so we can fail fast with a clear message
+    // if not elevated. The hooks are then released immediately and re-installed
+    // on demand only while recording (see StartRecording), so FLOW adds no
+    // overhead to system-wide input while idle, playing back, or auto-clicking.
     if (!g_app.engine->InstallHooks()) {
         MessageBoxW(NULL, L"Failed to install input hooks!\n\nRun as Administrator.",
             L"Error", MB_OK | MB_ICONERROR);
         delete g_app.engine;
         return 1;
     }
+    g_app.engine->UninstallHooks();
 
     RegisterHotkeys();
     CreateControls(g_app.hwnd);
