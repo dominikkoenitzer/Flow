@@ -58,10 +58,28 @@ void HighResTimer::PreciseSleep(DWORD microseconds) {
     QueryPerformanceCounter(&start);
 
     LONGLONG targetTicks = (microseconds * freq.QuadPart) / 1000000;
-    
+
     do {
         QueryPerformanceCounter(&end);
     } while ((end.QuadPart - start.QuadPart) < targetTicks);
+}
+
+void HighResTimer::PreciseDelayMs(DWORD milliseconds) {
+    if (milliseconds == 0) return;
+
+    LARGE_INTEGER freq, start, now;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&start);
+    const LONGLONG target = start.QuadPart + (freq.QuadPart * milliseconds) / 1000;
+
+    // Sleep away the bulk of the wait so we don't spin a CPU core; keep only a
+    // ~2ms tail to busy-wait for precision. For long delays this costs ~0% CPU.
+    if (milliseconds > 2) {
+        Sleep(milliseconds - 2);
+    }
+    do {
+        QueryPerformanceCounter(&now);
+    } while (now.QuadPart < target);
 }
 
 // ============================================================================
@@ -106,6 +124,11 @@ FlowEngine::~FlowEngine() {
 // ============================================================================
 
 bool FlowEngine::InstallHooks() {
+    // Idempotent: already installed is success (lets StartRecording call freely).
+    if (mouseHook && keyboardHook) {
+        return true;
+    }
+
     // Install low-level mouse hook
     mouseHook = SetWindowsHookEx(
         WH_MOUSE_LL, 
@@ -245,6 +268,11 @@ void FlowEngine::OnKeyboardEvent(WPARAM wParam, KBDLLHOOKSTRUCT* keyStruct) {
 void FlowEngine::StartRecording() {
     if (isRecording.load()) return;
 
+    // Low-level hooks are only needed while recording. Installing them on demand
+    // (instead of for the whole app lifetime) means FLOW intercepts zero system
+    // input while idle / playing / auto-clicking, keeping the OS responsive.
+    if (!InstallHooks()) return;
+
     ClearRecording();
     recordingStartTime = GetTickCount();
     isRecording.store(true);
@@ -252,6 +280,9 @@ void FlowEngine::StartRecording() {
 
 void FlowEngine::StopRecording() {
     isRecording.store(false);
+    // Release the global hooks so we stop touching system-wide input until the
+    // next recording session.
+    UninstallHooks();
 }
 
 void FlowEngine::ClearRecording() {
@@ -308,13 +339,8 @@ void FlowEngine::ClickerThreadFunction() {
             delay = humanizer.AddVariance(delay);
         }
 
-        // High-precision sleep
-        if (delay > 10) {
-            Sleep(delay - 2);
-            HighResTimer::PreciseSleep((delay % 10) * 1000);
-        } else {
-            HighResTimer::PreciseSleep(delay * 1000);
-        }
+        // Wait the click interval (sub-ms accurate, releases the CPU).
+        HighResTimer::PreciseDelayMs(delay);
     }
 }
 
@@ -391,12 +417,7 @@ void FlowEngine::PlaybackThreadFunction() {
             }
 
             if (timeDiff > 0) {
-                if (timeDiff > 10) {
-                    Sleep(timeDiff - 2);
-                    HighResTimer::PreciseSleep((timeDiff % 10) * 1000);
-                } else {
-                    HighResTimer::PreciseSleep(timeDiff * 1000);
-                }
+                HighResTimer::PreciseDelayMs(timeDiff);
             }
 
             INPUT input = {};

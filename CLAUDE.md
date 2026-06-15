@@ -26,11 +26,14 @@ The manual g++ invocation (what the script/task run):
 ```
 g++ -std=c++17 -O3 -mwindows -I include -o build/FLOW.exe \
     src/main.cpp src/FlowEngine.cpp build/resource.o \
-    -luser32 -lgdi32 -lcomctl32 -lgdiplus -static-libgcc -static-libstdc++
+    -luser32 -lgdi32 -lcomctl32 -lgdiplus -static -static-libgcc -static-libstdc++
 ```
 
+**`-static` is mandatory for distribution.** Without it the exe imports `libwinpthread-1.dll` (pulled in by `std::thread`/`std::mutex`) and fails to start on any machine without MinGW installed. `-static` bundles libwinpthread/libstdc++/libgcc into the exe; only system DLLs (user32, gdi32, …) stay external.
+
 Notes:
-- `windres resource.rc -O coff -o build/resource.o` embeds the app icon; the build still succeeds without it (icon just won't appear).
+- `windres resource.rc -O coff -o build/resource.o` embeds the app icon **and `FLOW.manifest`** (admin elevation + visual styles + DPI awareness) into `resource.o`. The build still succeeds without it, but the resulting exe won't auto-elevate or get visual styles — so end users who double-click it hit the "Failed to install input hooks" error. Always build with the resource object for release.
+- **Releases are automated** by `.github/workflows/release.yml`: releases are **named, not numbered** (e.g. `firefly`), so pushing any tag builds a static binary, verifies it has no non-system DLL imports and an embedded manifest, then publishes a draft GitHub Release titled `FLOW — <Name>` with the exe, zip, and SHA-256 checksums. `scripts/package.ps1` produces the same artifacts locally.
 - There are **no tests** and **no linter** configured.
 - The app **requires Administrator privileges** (declared in `FLOW.manifest` and required for global low-level hooks). `WinMain` aborts with an error box if `InstallHooks()` fails — that failure almost always means it wasn't run elevated.
 
