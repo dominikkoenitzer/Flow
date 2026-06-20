@@ -1,0 +1,84 @@
+name: 🐞 Bug report
+description: Something in FLOW doesn't work as expected.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in the details below so it can be reproduced.
+        For security issues, **do not** open a public issue — see [SECURITY.md](https://github.com/dominikkoenitzer/Flow/blob/master/SECURITY.md).
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I ran FLOW **as Administrator** (required for input hooks).
+          required: true
+        - label: I'm on the **latest release** and searched existing issues.
+          required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I do X, FLOW does Y, but I expected Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps. Mention the affected feature (recording, playback, auto-clicker, UI, hotkeys).
+      placeholder: |
+        1. Open FLOW
+        2. Record a macro with ...
+        3. Press F9 to play back
+        4. See ...
+    validations:
+      required: true
+
+  - type: input
+    id: flow-version
+    attributes:
+      label: FLOW release
+      description: The release name (e.g. Firefly), or the commit if you built from source.
+      placeholder: Firefly
+    validations:
+      required: true
+
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      description: "Windows 10 or 11, and the build number (Settings → System → About, or run `winver`)."
+      placeholder: Windows 11 23H2 (22631.x)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Recording
+        - Playback
+        - Auto-clicker
+        - Hotkeys
+        - UI / rendering
+        - Save / load macro (.rec)
+        - Settings / persistence
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Antivirus/SmartScreen messages, multi-monitor or high-DPI setup, screenshots, etc.
+    validations:
+      required: false
