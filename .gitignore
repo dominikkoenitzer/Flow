@@ -97,10 +97,11 @@ desktop.ini
 *.bak
 *.backup
 
-# User-generated content
-macros/*.flow
-macros/*.dat
-!examples/*.flow
+# Release artifacts (scripts/package.ps1 output)
+dist/
+
+# Recorded macros — don't commit personal recordings
+*.rec
 
 # IDE specific
 *.cbp

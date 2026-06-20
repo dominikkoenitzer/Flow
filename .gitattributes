@@ -1,0 +1,30 @@
+# Normalize line endings deterministically across machines.
+# The repository stores text as LF; this keeps diffs clean regardless of each
+# contributor's core.autocrlf setting.
+* text=auto
+
+# Windows-native scripts: always check out with CRLF in the working tree.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Explicit text types (defensive; covered by text=auto above).
+*.cpp      text
+*.h        text
+*.rc       text
+*.manifest text
+*.md       text
+*.yml      text
+*.yaml     text
+
+# Binary assets — never normalize, never diff as text.
+*.png binary
+*.ico binary
+*.exe binary
+*.o   binary
+
+# Recorded macros are raw, compiler-padded structs — binary, not text.
+*.rec binary
+
+# Collapse generated/vendored noise in PR diffs and language stats.
+CLAUDE.md linguist-documentation
