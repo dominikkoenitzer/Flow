@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & ideas
+    url: https://github.com/dominikkoenitzer/Flow/discussions
+    about: Ask a question or float an idea. Please use Discussions for anything that isn't a concrete bug or feature request.
+  - name: 📦 Downloads & releases
+    url: https://github.com/dominikkoenitzer/Flow/releases
+    about: Get the latest FLOW.exe, the zip, and the SHA-256 checksums.
+  - name: 🔒 Report a security issue
+    url: https://github.com/dominikkoenitzer/Flow/security/advisories/new
+    about: Privately report a vulnerability — please don't open a public issue.
