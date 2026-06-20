@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # FLOW has no package-manager dependencies (C++ with no manifest), so the only
+  # thing to keep current is the GitHub Actions used by CI and the release workflow.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "github-actions"
