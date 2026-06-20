@@ -1,0 +1,31 @@
+# EditorConfig — https://editorconfig.org
+# Conventions for FLOW. Keep in sync with .gitattributes and CI (-Wall -Wextra -Werror).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# C / C++ sources and headers — 4-space indent, no tabs.
+[*.{c,cpp,cc,h,hpp}]
+indent_size = 4
+
+# Windows resource scripts and manifest.
+[*.{rc,manifest}]
+indent_size = 4
+
+# YAML (workflows, dependabot, issue forms) uses 2-space indent.
+[*.{yml,yaml}]
+indent_size = 2
+
+# Markdown — keep trailing whitespace (it can be a hard line break).
+[*.md]
+trim_trailing_whitespace = false
+
+# Windows-native scripts are checked out CRLF on Windows (matches .gitattributes).
+[*.{ps1,cmd,bat}]
+end_of_line = crlf
