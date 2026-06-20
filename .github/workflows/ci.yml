@@ -1,0 +1,99 @@
+name: CI
+
+# Build gate on every push and PR to master. Compiles the Release binary with
+# MinGW (warnings are errors) and verifies it is fully static + manifest-embedded
+# — the same checks the release workflow runs before publishing.
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - '**/*.md'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '.gitignore'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/dependabot.yml'
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - '**/*.md'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '.gitignore'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/dependabot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref so only the latest commit is built.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Run the JavaScript actions on Node 24 (matches release.yml; clears the Node 20
+# deprecation warning without bumping the action versions).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: Build (Windows, MinGW)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MinGW-w64 (MSYS2)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-binutils
+
+      - name: Compile resources
+        run: |
+          mkdir -p build
+          windres resource.rc -O coff -o build/resource.o
+
+      # Keep this g++ invocation in sync with scripts/build.ps1 and
+      # .github/workflows/release.yml — all three must match the real build.
+      - name: Build (Release, static, warnings as errors)
+        run: |
+          g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -Werror -mwindows -I include \
+            -o build/FLOW.exe \
+            src/main.cpp src/FlowEngine.cpp build/resource.o \
+            -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 \
+            -static -static-libgcc -static-libstdc++
+
+      - name: Verify the binary is self-contained + manifest embedded
+        run: |
+          echo "== DLL imports =="
+          objdump -p build/FLOW.exe | grep -i "DLL Name"
+          # Fail if any MinGW runtime DLL leaked into the imports.
+          if objdump -p build/FLOW.exe | grep -iE "libwinpthread|libstdc\+\+|libgcc|libgomp"; then
+            echo "::error::Non-system DLL dependency found - build is NOT static."
+            exit 1
+          fi
+          # Fail if the admin-elevation manifest did not get embedded.
+          if ! grep -aq "requireAdministrator" build/FLOW.exe; then
+            echo "::error::Manifest not embedded (no requireAdministrator)."
+            exit 1
+          fi
+          echo "OK: self-contained + manifest embedded."
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FLOW-ci-build
+          path: build/FLOW.exe
+          if-no-files-found: error
+          retention-days: 7
