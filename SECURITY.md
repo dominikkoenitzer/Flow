@@ -21,7 +21,7 @@ Report privately using one of:
 
 Please include:
 
-- The FLOW release name (e.g. *Firefly*) and your Windows version.
+- Your FLOW build — the `flow` release (rolling latest) or the commit, if built from source — and your Windows version.
 - A description of the issue and its impact.
 - Step-by-step reproduction, and a proof-of-concept if you have one.
 
