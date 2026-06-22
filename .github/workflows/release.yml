@@ -1,17 +1,19 @@
 name: Release
 
 # Builds a fully static, self-contained Windows binary with MinGW and publishes
-# it as a named GitHub Release. Triggered by pushing a tag (e.g. firefly).
+# it as the single rolling "flow" GitHub Release. There is no versioning — the
+# `flow` tag is force-moved to the latest commit and re-pushed to update it.
 on:
   push:
     tags:
-      # Releases are named, not numbered (Firefly, ...) — any pushed tag is a release.
+      # Unversioned rolling release: force-push the `flow` tag to (re)publish.
       - '*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release name for a manual run (e.g. firefly)'
-        required: true
+        description: 'Release tag (the rolling release is "flow")'
+        required: false
+        default: flow
 
 permissions:
   contents: write
@@ -68,7 +70,7 @@ jobs:
           fi
           echo "OK: self-contained + manifest embedded."
 
-      - name: Determine release name
+      - name: Determine tag
         id: ver
         run: |
           if [ "${{ github.ref_type }}" = "tag" ]; then
@@ -76,36 +78,32 @@ jobs:
           else
             VER="${{ github.event.inputs.tag }}"
           fi
-          # Title-case the tag for the display title (firefly -> Firefly).
-          DISPLAY="$(echo "$VER" | sed -E 's/(^|[ _-])([a-z])/\1\u\2/g')"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
-          echo "display=$DISPLAY" >> "$GITHUB_OUTPUT"
-          echo "Releasing: $DISPLAY (tag $VER)"
+          echo "Releasing tag: $VER"
 
       - name: Package
         run: |
-          VER="${{ steps.ver.outputs.version }}"
-          DIST="FLOW-$VER-win64"
+          DIST="FLOW-win64"
           mkdir -p "dist/$DIST"
           cp build/FLOW.exe "dist/$DIST/"
           cp README.md "dist/$DIST/" 2>/dev/null || true
           cp LICENSE* "dist/$DIST/" 2>/dev/null || true
           (cd dist && zip -r "$DIST.zip" "$DIST")
-          (cd dist && sha256sum "$DIST.zip" "$DIST/FLOW.exe" | tee "SHA256SUMS-$VER.txt")
+          (cd dist && sha256sum "$DIST.zip" "$DIST/FLOW.exe" | tee "SHA256SUMS.txt")
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: FLOW — "${{ steps.ver.outputs.display }}"
+          name: FLOW
           tag_name: ${{ steps.ver.outputs.version }}
           draft: false
           generate_release_notes: true
           files: |
-            dist/FLOW-${{ steps.ver.outputs.version }}-win64.zip
-            dist/FLOW-${{ steps.ver.outputs.version }}-win64/FLOW.exe
-            dist/SHA256SUMS-${{ steps.ver.outputs.version }}.txt
+            dist/FLOW-win64.zip
+            dist/FLOW-win64/FLOW.exe
+            dist/SHA256SUMS.txt
           body: |
-            ## FLOW — "${{ steps.ver.outputs.display }}"
+            ## FLOW
 
             High-speed input automation for Windows — record/replay macros and a low-latency auto-clicker.
 
@@ -126,7 +124,7 @@ jobs:
             | Stop all | Pause |
 
             ### Verify your download
-            Compare against `SHA256SUMS-${{ steps.ver.outputs.version }}.txt`:
+            Compare against `SHA256SUMS.txt`:
             ```powershell
             Get-FileHash .\FLOW.exe -Algorithm SHA256
             ```
