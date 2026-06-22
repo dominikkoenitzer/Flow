@@ -44,9 +44,9 @@ body:
   - type: input
     id: flow-version
     attributes:
-      label: FLOW release
-      description: The release name (e.g. Firefly), or the commit if you built from source.
-      placeholder: Firefly
+      label: FLOW build
+      description: The `flow` release (the rolling latest), or the commit if you built from source.
+      placeholder: flow
     validations:
       required: true
 
