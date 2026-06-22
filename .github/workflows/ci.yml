@@ -91,7 +91,7 @@ jobs:
           echo "OK: self-contained + manifest embedded."
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: FLOW-ci-build
           path: build/FLOW.exe
