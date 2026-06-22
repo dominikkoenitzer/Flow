@@ -3,7 +3,7 @@
 // Application Icon
 #define IDI_APPICON 101
 
-IDI_APPICON ICON "Firefly-Flow.ico"
+IDI_APPICON ICON "Flow.ico"
 
 // Application manifest: requests Administrator elevation (required for the
 // global low-level hooks), enables Common-Controls v6 visual styles, and
