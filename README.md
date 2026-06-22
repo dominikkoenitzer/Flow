@@ -105,21 +105,21 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, coding co
 | `scripts/build.ps1` | Build script (Release/Debug) wrapping the g++ invocation. |
 | `scripts/package.ps1` | Produces the release artifacts (zip + exe + SHA-256) locally. |
 | `.github/workflows/ci.yml` | Build + self-contained/manifest verification on every push & PR. |
-| `.github/workflows/release.yml` | Builds and publishes a named GitHub Release when a tag is pushed. |
+| `.github/workflows/release.yml` | Builds and publishes the rolling `flow` GitHub Release when the tag is pushed. |
 | `CLAUDE.md` | In-depth architecture notes for contributors (and AI assistants). |
 
 ## Cutting a release
 
-Releases are **named, not numbered** — each one gets a codename. This first release is **Firefly**.
+There's a single, **unversioned** release — **`flow`** — that always holds the latest build. No version numbers, no per-release codenames.
 
-Releases are fully automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). Push a tag with the release name and the workflow builds, verifies the binary is self-contained, and **publishes** a GitHub Release titled *FLOW — "Firefly"* with the exe, zip, and checksums attached:
+Releases are fully automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). To (re)publish, force-move the `flow` tag onto the latest commit and push it; the workflow builds, verifies the binary is self-contained, and **updates** the GitHub Release titled *FLOW* with the exe, zip, and checksums attached:
 
 ```powershell
-git tag Firefly
-git push origin Firefly
+git tag -f flow
+git push -f origin flow
 ```
 
-The release goes live automatically once CI passes (the build is verified self-contained before anything is published). The next release simply gets a new name (e.g. `git tag Mayfly`).
+The release updates automatically once CI passes (the build is verified self-contained before anything is published).
 
 To build the release artifacts locally without GitHub, run [`scripts/package.ps1`](scripts/package.ps1).
 

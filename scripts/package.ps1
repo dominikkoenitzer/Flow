@@ -1,18 +1,14 @@
 # Package Script for FLOW (Windows)
-# Builds a Release binary and produces the same release artifacts the CI workflow
-# does: a versioned zip, the standalone exe, and a SHA-256 checksum file in dist\.
+# Builds a Release binary and produces the same unversioned artifacts the rolling
+# "flow" release workflow does: the zip, the standalone exe, and a SHA-256
+# checksum file in dist\.
 #
-# Usage: .\scripts\package.ps1 [-Version firefly]
-param(
-    [Parameter(Mandatory = $false)]
-    [string]$Version = "firefly-local"
-)
-
+# Usage: .\scripts\package.ps1
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $BuildExe    = Join-Path $ProjectRoot "build\Release\FLOW.exe"
 $DistRoot    = Join-Path $ProjectRoot "dist"
-$DistName    = "FLOW-$Version-win64"
+$DistName    = "FLOW-win64"
 $DistDir     = Join-Path $DistRoot $DistName
 
 Write-Host "== Building Release ==" -ForegroundColor Cyan
@@ -43,7 +39,7 @@ $ZipPath = Join-Path $DistRoot "$DistName.zip"
 if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
 Compress-Archive -Path $DistDir -DestinationPath $ZipPath
 
-$SumsPath = Join-Path $DistRoot "SHA256SUMS-$Version.txt"
+$SumsPath = Join-Path $DistRoot "SHA256SUMS.txt"
 $lines = foreach ($target in @($ZipPath, (Join-Path $DistDir "FLOW.exe"))) {
     $h = (Get-FileHash $target -Algorithm SHA256).Hash.ToLower()
     "$h  $((Resolve-Path $target -Relative))"
@@ -54,5 +50,5 @@ Write-Host ""
 Write-Host "== Artifacts in $DistRoot ==" -ForegroundColor Green
 Write-Host "  $DistName.zip"
 Write-Host "  $DistName\FLOW.exe"
-Write-Host "  SHA256SUMS-$Version.txt"
+Write-Host "  SHA256SUMS.txt"
 Get-Content $SumsPath | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
