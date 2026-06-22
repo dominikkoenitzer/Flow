@@ -33,7 +33,7 @@ g++ -std=c++17 -O3 -mwindows -I include -o build/FLOW.exe \
 
 Notes:
 - `windres resource.rc -O coff -o build/resource.o` embeds the app icon **and `FLOW.manifest`** (admin elevation + visual styles + DPI awareness) into `resource.o`. The build still succeeds without it, but the resulting exe won't auto-elevate or get visual styles — so end users who double-click it hit the "Failed to install input hooks" error. Always build with the resource object for release.
-- **Releases are automated** by `.github/workflows/release.yml`: releases are **named, not numbered** (e.g. `Firefly`), so pushing any tag builds a static binary, verifies it has no non-system DLL imports and an embedded manifest, then **publishes** a GitHub Release titled `FLOW — "<Name>"` with the exe, zip, and SHA-256 checksums attached. `scripts/package.ps1` produces the same artifacts locally.
+- **Releases are automated** by `.github/workflows/release.yml`: there is a **single rolling, unversioned release** tagged `flow` (no version numbers, no per-release codenames). Force-moving and re-pushing the `flow` tag (`git tag -f flow && git push -f origin flow`) builds a static binary, verifies it has no non-system DLL imports and an embedded manifest, then **updates** the GitHub Release titled `FLOW` with the exe (`FLOW-win64.zip` / `FLOW.exe` / `SHA256SUMS.txt`) attached. `scripts/package.ps1` produces the same artifacts locally.
 - There are **no tests** and **no linter** configured.
 - The app **requires Administrator privileges** (declared in `FLOW.manifest` and required for global low-level hooks). `WinMain` aborts with an error box if `InstallHooks()` fails — that failure almost always means it wasn't run elevated.
 
