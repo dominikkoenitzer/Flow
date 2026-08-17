@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Thanks for taking the time to file a bug. Please fill in the details below so it can be reproduced.
-        For security issues, **do not** open a public issue — see [SECURITY.md](https://github.com/dominikkoenitzer/Flow/blob/master/SECURITY.md).
+        For security issues, **do not** open a public issue — see [SECURITY.md](https://github.com/dominikkoenitzer/Flow/blob/main/SECURITY.md).
 
   - type: checkboxes
     id: preflight
