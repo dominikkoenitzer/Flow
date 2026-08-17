@@ -118,3 +118,10 @@ Doxyfile.bak
 # Package managers
 vcpkg_installed/
 conan.lock
+
+# AI agent tooling (local only)
+CLAUDE.md
+AGENTS.md
+.claude/
+.agents/
+skills-lock.json
