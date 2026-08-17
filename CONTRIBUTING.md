@@ -67,11 +67,11 @@ FLOW needs **Administrator privileges** for its global low-level input hooks. La
 
 ## Submitting changes
 
-1. **Branch** off `master`.
+1. **Branch** off `main`.
 2. **Build cleanly** (`.\scripts\build.ps1`) with no new warnings, and **run the elevated app** to confirm the affected feature actually works — there is no automated test suite, so manual verification is required.
 3. Keep commits focused with clear messages.
 4. Open a pull request and fill in the template. Describe what you changed and how you tested it.
-5. If you changed behavior, update [`README.md`](README.md) and [`CLAUDE.md`](CLAUDE.md) to match.
+5. If you changed behavior, update [`README.md`](README.md) to match.
 
 ## Reporting bugs & requesting features
 
