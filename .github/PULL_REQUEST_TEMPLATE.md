@@ -26,5 +26,4 @@
 - [ ] Any new pixel/layout literal is wrapped in `Sc()` / `Scf()` (DPI-safe).
 - [ ] If I moved a UI control, I updated **both** `CreateControls` and `PaintUI` (they share the layout constants).
 - [ ] I did **not** change the `.rec` macro format / `InputEvent` (or I have a migration plan).
-- [ ] I restored `flow::protection::EnforceProtection()` if I disabled it for debugging.
-- [ ] Updated `README.md` / `CLAUDE.md` if behavior changed.
+- [ ] Updated `README.md` if behavior changed.

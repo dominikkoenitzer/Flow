@@ -100,7 +100,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, coding co
 |---|---|
 | `src/main.cpp` | The entire Win32 GUI and all application state; owns the engine. |
 | `src/FlowEngine.cpp` / `include/FlowEngine.h` | UI-agnostic engine (`flow` namespace): recording, playback, auto-clicker, timing, humanization. |
-| `include/Protection.h` | Header-only anti-debugging helpers. |
 | `resource.rc` / `FLOW.manifest` | App icon + manifest (admin elevation, visual styles, DPI awareness), embedded via `windres`. |
 | `scripts/build.ps1` | Build script (Release/Debug) wrapping the g++ invocation. |
 | `scripts/package.ps1` | Produces the release artifacts (zip + exe + SHA-256) locally. |
