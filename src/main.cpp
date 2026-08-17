@@ -6,7 +6,6 @@
  */
 
 #include "FlowEngine.h"
-#include "Protection.h"
 #include <windows.h>
 #include <commctrl.h>
 #include <shellscalingapi.h>
@@ -1652,8 +1651,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         if (setDpiFunc) setDpiFunc(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         FreeLibrary(user32);
     }
-
-    flow::protection::EnforceProtection();
 
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     ULONG_PTR gdiplusToken = 0;

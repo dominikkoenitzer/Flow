@@ -46,21 +46,14 @@ Without `-static`, the exe imports `libwinpthread-1.dll` (pulled in by `std::thr
 
 FLOW needs **Administrator privileges** for its global low-level input hooks. Launch an elevated terminal (or accept the UAC prompt). If `InstallHooks()` fails at startup, you almost certainly aren't running elevated.
 
-### Debugging
-
-`WinMain` calls `flow::protection::EnforceProtection()`, which silently exits the process if a debugger is detected. **Comment out that call** while you need to attach a debugger, and restore it before committing.
-
 ## Project layout
 
 | Path | What it is |
 |---|---|
 | `src/main.cpp` | The Win32 GUI and all application state. |
 | `src/FlowEngine.cpp` / `include/FlowEngine.h` | UI-agnostic engine (`flow` namespace). |
-| `include/Protection.h` | Header-only anti-debugging. |
 | `resource.rc` / `FLOW.manifest` | Icon + manifest, embedded via `windres`. |
 | `scripts/` | `build.ps1`, `package.ps1`. |
-
-See [`CLAUDE.md`](CLAUDE.md) for a deep dive into the architecture (engine subsystems, rendering model, macro file format, settings persistence).
 
 ## Coding conventions
 
