@@ -105,7 +105,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, coding co
 | `scripts/package.ps1` | Produces the release artifacts (zip + exe + SHA-256) locally. |
 | `.github/workflows/ci.yml` | Build + self-contained/manifest verification on every push & PR. |
 | `.github/workflows/release.yml` | Builds and publishes the rolling `flow` GitHub Release when the tag is pushed. |
-| `CLAUDE.md` | In-depth architecture notes for contributors (and AI assistants). |
 
 ## Cutting a release
 
@@ -133,3 +132,9 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for th
 ## Disclaimer
 
 FLOW is intended for legitimate automation of repetitive tasks. You are responsible for complying with the terms of service of any software you use it with.
+
+## Author
+
+**Dominik Könitzer** — software engineer in Zürich, Switzerland.
+
+[dominikkoenitzer.ch](https://dominikkoenitzer.ch) · [@dominikkoenitzer](https://github.com/dominikkoenitzer) · [dominik.koenitzer@gmail.com](mailto:dominik.koenitzer@gmail.com)
