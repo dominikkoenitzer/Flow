@@ -1,11 +1,11 @@
 name: CI
 
-# Build gate on every push and PR to master. Compiles the Release binary with
+# Build gate on every push and PR to main. Compiles the Release binary with
 # MinGW (warnings are errors) and verifies it is fully static + manifest-embedded
 # — the same checks the release workflow runs before publishing.
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths-ignore:
       - '**/*.md'
       - '.editorconfig'
@@ -15,7 +15,7 @@ on:
       - '.github/PULL_REQUEST_TEMPLATE.md'
       - '.github/dependabot.yml'
   pull_request:
-    branches: [master]
+    branches: [main]
     paths-ignore:
       - '**/*.md'
       - '.editorconfig'
