@@ -9,6 +9,10 @@
 [![Language](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](#build-from-source)
 [![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)](#license)
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="The FLOW main window: macro recording, playback controls, and the auto-clicker." width="420">
+</p>
+
 > ⚠️ FLOW must be run **as Administrator**. It installs global low-level input hooks, which Windows only permits for elevated processes. The downloaded `.exe` requests elevation automatically (UAC prompt).
 
 ## Features
@@ -26,8 +30,8 @@
 Grab the latest build from the [**Releases**](https://github.com/dominikkoenitzer/Flow/releases) page:
 
 - **`FLOW.exe`** — the standalone executable (recommended). Fully self-contained, no dependencies.
-- **`FLOW-<name>-win64.zip`** — the same exe plus this README.
-- **`SHA256SUMS-<name>.txt`** — checksums to verify your download.
+- **`FLOW-win64.zip`** — the same exe plus this README.
+- **`SHA256SUMS.txt`** — checksums to verify your download.
 
 ### "Windows protected your PC" (SmartScreen)
 
@@ -40,7 +44,7 @@ If you want to be certain the download is intact, verify the checksum:
 
 ```powershell
 Get-FileHash .\FLOW.exe -Algorithm SHA256
-# compare against the value in SHA256SUMS-<name>.txt
+# compare against the value in SHA256SUMS.txt
 ```
 
 Some antivirus engines may also flag automation tools that use global input hooks. This is a false positive inherent to this category of software.
