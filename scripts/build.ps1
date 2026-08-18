@@ -66,9 +66,12 @@ if (Test-Path $ResourceFile) {
     $ResourceObj = $null
 }
 
+# Every .cpp under src/, so a new translation unit builds without editing this
+# script. Sorted for a reproducible command line.
 $SourceFiles = @(
-    (Join-Path $SrcDir "main.cpp"),
-    (Join-Path $SrcDir "FlowEngine.cpp")
+    Get-ChildItem -Path $SrcDir -Filter *.cpp -Recurse |
+        Sort-Object FullName |
+        Select-Object -ExpandProperty FullName
 )
 
 # Add resource object if it was compiled successfully
