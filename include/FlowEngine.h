@@ -154,6 +154,8 @@ class HumanizationEngine {
 private:
     std::mt19937 generator;                         ///< Mersenne Twister PRNG
     std::normal_distribution<double> distribution;   ///< Gaussian distribution
+    double bias;                                    ///< Configured mean
+    double spread;                                  ///< Configured standard deviation
     std::mutex mtx;                                 ///< Thread safety mutex
 
 public:
@@ -168,13 +170,16 @@ public:
      * @brief Add Gaussian-distributed variance to a delay value
      * @param baseDelay Base delay in milliseconds
      * @return Modified delay with added variance (minimum 1ms)
+     * @note A standard deviation of zero means "no jitter": the mean is still
+     *       applied, but no random draw is taken. std::normal_distribution
+     *       requires a positive stddev, so it is not constructed in that case.
      */
     DWORD AddVariance(DWORD baseDelay);
 
     /**
      * @brief Reconfigure the Gaussian distribution parameters
      * @param mean New mean value
-     * @param stddev New standard deviation
+     * @param stddev New standard deviation; zero or negative disables jitter
      */
     void SetDistribution(double mean, double stddev);
 };
