@@ -62,6 +62,23 @@ FLOW needs **Administrator privileges** for its global low-level input hooks. La
 | `resource.rc` / `FLOW.manifest` | Icon + manifest, embedded via `windres`. |
 | `scripts/` | `build.ps1`, `package.ps1`. |
 
+## Tests
+
+The engine has a [doctest](https://github.com/doctest/doctest) suite under `tests/`
+covering the humanization jitter, the `.rec` file format (including the guards
+against truncated and corrupt files), and the timing primitives.
+
+```
+.\scripts\test.ps1                       # build and run everything
+.\scripts\test.ps1 -Filter "*macro*"     # one group
+```
+
+It links `FlowEngine.cpp` only, so it needs neither a window nor elevation. CI
+runs the same compilation with `-Werror`.
+
+`main.cpp` and `src/ui/` are not covered — they own `WinMain` and the painted
+GUI, which still need manual verification.
+
 ## Coding conventions
 
 - **C++17**, 4-space indentation, no tabs. An [`.editorconfig`](.editorconfig) is provided — please respect it.
@@ -75,7 +92,7 @@ FLOW needs **Administrator privileges** for its global low-level input hooks. La
 ## Submitting changes
 
 1. **Branch** off `main`.
-2. **Build cleanly** (`.\scripts\build.ps1`) with no new warnings, and **run the elevated app** to confirm the affected feature actually works — there is no automated test suite, so manual verification is required.
+2. **Build cleanly** (`.\scripts\build.ps1`) with no new warnings and **run the tests** (`.\scripts\test.ps1`). Engine changes should come with a test. GUI changes have no automated coverage, so **run the elevated app** and confirm the affected feature actually works.
 3. Keep commits focused with clear messages.
 4. Open a pull request and fill in the template. Describe what you changed and how you tested it.
 5. If you changed behavior, update [`README.md`](README.md) to match.

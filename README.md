@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml/badge.svg)](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/dominikkoenitzer/Flow?display_name=tag&label=latest)](https://github.com/dominikkoenitzer/Flow/releases/latest)
+[![tests](https://img.shields.io/badge/tests-27%20passing-00599C)](tests)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?logo=windows&logoColor=white)](#requirements)
 [![Language](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](#build-from-source)
 [![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)](#license)
@@ -108,7 +109,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, coding co
 | `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
 | `src/FlowEngine.cpp` / `include/FlowEngine.h` | UI-agnostic engine (`flow` namespace): recording, playback, auto-clicker, timing, humanization. |
 | `resource.rc` / `FLOW.manifest` | App icon + manifest (admin elevation, visual styles, DPI awareness), embedded via `windres`. |
+| `tests/` | doctest suite over the engine — humanization, the .rec format, timing. |
 | `scripts/build.ps1` | Build script (Release/Debug) wrapping the g++ invocation. |
+| `scripts/test.ps1` | Builds and runs the test suite. |
 | `scripts/package.ps1` | Produces the release artifacts (zip + exe + SHA-256) locally. |
 | `.github/workflows/ci.yml` | Build + self-contained/manifest verification on every push & PR. |
 | `.github/workflows/release.yml` | Builds and publishes the rolling `flow` GitHub Release when the tag is pushed. |

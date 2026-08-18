@@ -28,3 +28,8 @@
 
 # Collapse generated/vendored noise in PR diffs and language stats.
 CLAUDE.md linguist-documentation
+
+# doctest is a vendored single-header dependency, not FLOW's own code. Marking
+# it keeps ~9k lines out of the language breakdown and folds it in diffs.
+tests/doctest.h linguist-vendored
+tests/doctest.h -diff
