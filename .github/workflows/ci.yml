@@ -74,6 +74,16 @@ jobs:
             -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 \
             -static -static-libgcc -static-libstdc++
 
+      # The engine tests link FlowEngine.cpp only -- no window, no hooks, no
+      # elevation -- so they run unmodified on a GitHub runner.
+      - name: Test (doctest)
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -I include -I tests \
+            -o build/FLOW_Tests.exe \
+            tests/*.cpp src/FlowEngine.cpp \
+            -luser32 -static -static-libgcc -static-libstdc++
+          ./build/FLOW_Tests.exe
+
       - name: Verify the binary is self-contained + manifest embedded
         run: |
           echo "== DLL imports =="
