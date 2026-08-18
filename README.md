@@ -85,7 +85,7 @@ Or the raw invocation:
 ```
 windres resource.rc -O coff -o build/resource.o
 g++ -std=c++17 -O3 -mwindows -I include -o build/FLOW.exe \
-    src/main.cpp src/FlowEngine.cpp build/resource.o \
+    src/*.cpp src/ui/*.cpp build/resource.o \
     -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
 ```
 
@@ -98,7 +98,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, coding co
 
 | Path | What it is |
 |---|---|
-| `src/main.cpp` | The entire Win32 GUI and all application state; owns the engine. |
+| `src/main.cpp` | The window procedure, control creation and `WinMain` — the Win32 shell. |
+| `src/AppState.cpp` / `include/AppState.h` | Control IDs, cached fonts, and the single `AppState` the whole GUI reads. |
+| `src/Settings.cpp` / `include/Settings.h` | `%APPDATA%\FLOW\settings.cfg` load/save. |
+| `src/Hotkeys.cpp` / `include/Hotkeys.h` | The four global hotkeys and key-name formatting. |
+| `src/ui/Theme.h` | The design system: palette, layout grid, DPI scaling. One source for painting *and* control placement. |
+| `src/ui/Draw.cpp` / `include/ui/Draw.h` | Anti-aliased GDI+ primitives and the vector glyphs. |
+| `src/ui/Buttons.cpp` / `include/ui/Buttons.h` | The owner-draw buttons, toggles and key fields. |
+| `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
 | `src/FlowEngine.cpp` / `include/FlowEngine.h` | UI-agnostic engine (`flow` namespace): recording, playback, auto-clicker, timing, humanization. |
 | `resource.rc` / `FLOW.manifest` | App icon + manifest (admin elevation, visual styles, DPI awareness), embedded via `windres`. |
 | `scripts/build.ps1` | Build script (Release/Debug) wrapping the g++ invocation. |

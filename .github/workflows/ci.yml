@@ -70,7 +70,7 @@ jobs:
         run: |
           g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -Werror -mwindows -I include \
             -o build/FLOW.exe \
-            src/main.cpp src/FlowEngine.cpp build/resource.o \
+            src/*.cpp src/ui/*.cpp build/resource.o \
             -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 \
             -static -static-libgcc -static-libstdc++
 
