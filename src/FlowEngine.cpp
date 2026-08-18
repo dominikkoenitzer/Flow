@@ -86,19 +86,30 @@ void HighResTimer::PreciseDelayMs(DWORD milliseconds) {
 // HumanizationEngine Implementation
 // ============================================================================
 
-HumanizationEngine::HumanizationEngine(double mean, double stddev) 
-    : generator(std::random_device{}()), distribution(mean, stddev) {}
+// std::normal_distribution requires a strictly positive standard deviation --
+// constructing one with zero is undefined behaviour, and libstdc++ asserts on
+// it. Settings.cpp accepts a stored humanizationStdDev of 0 (a reasonable way
+// for a user to write "no jitter" in %APPDATA%\FLOW\settings.cfg), so the
+// engine treats a non-positive spread as "apply the bias, take no random draw"
+// rather than trusting every caller to pre-validate.
+HumanizationEngine::HumanizationEngine(double mean, double stddev)
+    : generator(std::random_device{}()),
+      distribution(mean, stddev > 0.0 ? stddev : 1.0),
+      bias(mean),
+      spread(stddev) {}
 
 DWORD HumanizationEngine::AddVariance(DWORD baseDelay) {
     std::lock_guard<std::mutex> lock(mtx);
-    double variance = distribution(generator);
+    double variance = spread > 0.0 ? distribution(generator) : bias;
     double newDelay = baseDelay + variance;
     return static_cast<DWORD>(std::max(1.0, newDelay));
 }
 
 void HumanizationEngine::SetDistribution(double mean, double stddev) {
     std::lock_guard<std::mutex> lock(mtx);
-    distribution = std::normal_distribution<double>(mean, stddev);
+    bias = mean;
+    spread = stddev;
+    distribution = std::normal_distribution<double>(mean, stddev > 0.0 ? stddev : 1.0);
 }
 
 // ============================================================================
