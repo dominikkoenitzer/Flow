@@ -96,6 +96,11 @@ jobs:
         with:
           name: FLOW
           tag_name: ${{ steps.ver.outputs.version }}
+          # Pin the release to the commit that was actually built. On a manual
+          # run the action otherwise defaults to github.ref ("refs/heads/main"),
+          # and the release API rejects a full ref as a target_commitish -- so
+          # the workflow_dispatch path failed before it could move the tag.
+          target_commitish: ${{ github.sha }}
           draft: false
           generate_release_notes: true
           files: |
