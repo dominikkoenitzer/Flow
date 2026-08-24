@@ -3,8 +3,8 @@
  * @brief The window's control IDs, cached fonts, and the single app state.
  *
  * FLOW is one window with one document, so the state is one global rather than
- * a model threaded through every handler. Declaring it here — instead of at the
- * top of main.cpp — is what lets the settings, drawing and dialog code live in
+ * a model threaded through every handler. Declaring it here, instead of at the
+ * top of main.cpp, is what lets the settings, drawing and dialog code live in
  * their own translation units.
  */
 #pragma once

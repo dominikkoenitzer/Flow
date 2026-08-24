@@ -1,12 +1,6 @@
 /**
  * @file FlowEngine.cpp
- * @brief Implementation of the FLOW Input Automation Engine
- * 
- * @author FLOW Development Team
- * @date 2026-01-21
- * 
- * @copyright Copyright (c) 2026 FLOW Project
- * Licensed under the MIT License
+ * @brief Implementation of the engine declared in FlowEngine.h.
  */
 
 #include "FlowEngine.h"
@@ -25,17 +19,13 @@ static std::string WStringToUtf8(const std::wstring& w) {
 
 namespace flow {
 
-// ============================================================================
-// Static Member Initialization
-// ============================================================================
+// ---- static members ----
 
 HHOOK FlowEngine::mouseHook = nullptr;
 HHOOK FlowEngine::keyboardHook = nullptr;
 FlowEngine* FlowEngine::instance = nullptr;
 
-// ============================================================================
-// HighResTimer Implementation
-// ============================================================================
+// ---- HighResTimer ----
 
 HighResTimer::HighResTimer() {
     QueryPerformanceFrequency(&frequency);
@@ -82,9 +72,7 @@ void HighResTimer::PreciseDelayMs(DWORD milliseconds) {
     } while (now.QuadPart < target);
 }
 
-// ============================================================================
-// HumanizationEngine Implementation
-// ============================================================================
+// ---- HumanizationEngine ----
 
 // std::normal_distribution requires a strictly positive standard deviation --
 // constructing one with zero is undefined behaviour, and libstdc++ asserts on
@@ -112,9 +100,7 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
     distribution = std::normal_distribution<double>(mean, stddev > 0.0 ? stddev : 1.0);
 }
 
-// ============================================================================
-// FlowEngine Construction & Destruction
-// ============================================================================
+// ---- construction and teardown ----
 
 FlowEngine::FlowEngine()
     : isRecording(false), recordingStartTime(0), isClicking(false),
@@ -130,9 +116,7 @@ FlowEngine::~FlowEngine() {
     instance = nullptr;
 }
 
-// ============================================================================
-// Hook Management Implementation
-// ============================================================================
+// ---- hook management ----
 
 bool FlowEngine::InstallHooks() {
     // Idempotent: already installed is success (lets StartRecording call freely).
@@ -181,9 +165,7 @@ void FlowEngine::UninstallHooks() {
     }
 }
 
-// ============================================================================
-// Hook Callback Procedures
-// ============================================================================
+// ---- hook callbacks ----
 
 LRESULT CALLBACK FlowEngine::MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0 && instance && instance->isRecording.load()) {
@@ -201,9 +183,7 @@ LRESULT CALLBACK FlowEngine::KeyboardHookProc(int nCode, WPARAM wParam, LPARAM l
     return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
 }
 
-// ============================================================================
-// Event Recording Handlers
-// ============================================================================
+// ---- event recording ----
 
 void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
     InputEvent event;
@@ -272,9 +252,7 @@ void FlowEngine::OnKeyboardEvent(WPARAM wParam, KBDLLHOOKSTRUCT* keyStruct) {
     recordedEvents.push_back(event);
 }
 
-// ============================================================================
-// Recording Control Implementation
-// ============================================================================
+// ---- recording control ----
 
 void FlowEngine::StartRecording() {
     if (isRecording.load()) return;
@@ -301,9 +279,7 @@ void FlowEngine::ClearRecording() {
     recordedEvents.clear();
 }
 
-// ============================================================================
-// Auto-Clicker Implementation
-// ============================================================================
+// ---- auto-clicker ----
 
 void FlowEngine::StartAutoClicker(DWORD intervalMs) {
     if (isClicking.load()) return;
@@ -355,9 +331,7 @@ void FlowEngine::ClickerThreadFunction() {
     }
 }
 
-// ============================================================================
-// Macro Playback Implementation
-// ============================================================================
+// ---- macro playback ----
 
 void FlowEngine::StartPlayback(int loops) {
     if (isPlaying.load()) {
@@ -522,9 +496,7 @@ void FlowEngine::PlaybackThreadFunction() {
     currentLoopIteration.store(0);
 }
 
-// ============================================================================
-// Data Persistence Implementation
-// ============================================================================
+// ---- persistence ----
 
 bool FlowEngine::SaveMacro(const std::wstring& filename) {
     std::string path = WStringToUtf8(filename);

@@ -14,7 +14,7 @@
 
 ## How I tested it
 
-<!-- There is no automated test suite — manual verification is required. -->
+<!-- There is no automated test suite, so manual verification is required. -->
 
 - [ ] Built cleanly with `.\scripts\build.ps1` (no new warnings; CI uses `-Wall -Wextra -Werror`).
 - [ ] Ran the exe **as Administrator** and confirmed the affected feature works.
@@ -22,7 +22,7 @@
 
 ## Checklist
 
-- [ ] The build stays **static** — no new non-system DLL imports (CI verifies this).
+- [ ] The build stays **static**, with no new non-system DLL imports (CI verifies this).
 - [ ] Any new pixel/layout literal is wrapped in `Sc()` / `Scf()` (DPI-safe).
 - [ ] If I moved a UI control, I updated **both** `CreateControls` and `PaintUI` (they share the layout constants).
 - [ ] I did **not** change the `.rec` macro format / `InputEvent` (or I have a migration plan).

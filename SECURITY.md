@@ -6,7 +6,7 @@ FLOW ships as a single rolling line of named releases. Only the **latest publish
 
 | Version | Supported |
 |---|---|
-| Latest release | ✅ |
+| Latest release | Yes |
 | Older releases | ❌ |
 
 ## Reporting a vulnerability
@@ -15,24 +15,24 @@ FLOW ships as a single rolling line of named releases. Only the **latest publish
 
 Report privately using one of:
 
-1. **GitHub Security Advisories** (preferred) — open a private report at
+1. **GitHub Security Advisories**, preferred. Open a private report at
    <https://github.com/dominikkoenitzer/Flow/security/advisories/new>.
-2. **Email** — dominik.koenitzer@gmail.com with a clear description and reproduction steps.
+2. **Email** dominik.koenitzer@gmail.com with a clear description and reproduction steps.
 
 Please include:
 
-- Your FLOW build — the `flow` release (rolling latest) or the commit, if built from source — and your Windows version.
+- Your FLOW build (the `flow` rolling release, or the commit if you built from source) and your Windows version.
 - A description of the issue and its impact.
 - Step-by-step reproduction, and a proof-of-concept if you have one.
 
 You can expect an acknowledgement within a few days. Once a fix is ready, it will go out in the next release and you'll be credited if you'd like.
 
-## Scope & what is *not* a vulnerability
+## Scope, and what is not a vulnerability
 
 FLOW is, by design, a privileged input-automation tool. The following are inherent to that design and are **not** considered vulnerabilities:
 
 - **It requires Administrator rights.** Global low-level input hooks (`WH_MOUSE_LL` / `WH_KEYBOARD_LL`) are only permitted for elevated processes.
-- **Antivirus / SmartScreen warnings.** The binary is unsigned and uses global input hooks, so some engines flag it. This is a false positive inherent to this category of software — verify the published SHA-256 if you want assurance the download is intact.
+- **Antivirus / SmartScreen warnings.** The binary is unsigned and uses global input hooks, so some engines flag it. That is a false positive inherent to this category of software. Verify the published SHA-256 if you want assurance the download is intact.
 - **It can synthesize input.** Recording and replaying keystrokes/clicks is the entire purpose of the tool.
 
-Genuine security issues — for example memory-safety bugs reachable from a crafted `.rec` macro file, privilege-escalation paths beyond the intended elevation, or unsafe handling of the settings/macro files — are in scope and very welcome.
+Genuine security issues are in scope and very welcome: memory-safety bugs reachable from a crafted `.rec` macro file, privilege-escalation paths beyond the intended elevation, or unsafe handling of the settings and macro files.

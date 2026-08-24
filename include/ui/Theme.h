@@ -52,7 +52,7 @@ constexpr int EDIT_W     = 46;
 constexpr int CTRL_W     = CONTENT_W - 16;      // controls right-align at CONTENT_X+CTRL_W (=420)
 constexpr int CTRL_RIGHT = CONTENT_X + CTRL_W;  // 420
 
-// Vertical rhythm — explicit Y of every element (PaintUI + CreateControls share these)
+// Vertical rhythm: explicit Y of every element (PaintUI and CreateControls share these)
 constexpr int WORDMARK_Y   = 14;
 constexpr int SUBTITLE_Y   = 42;
 

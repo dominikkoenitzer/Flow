@@ -1,7 +1,7 @@
 name: Release
 
 # Builds a fully static, self-contained Windows binary with MinGW and publishes
-# it as the single rolling "flow" GitHub Release. There is no versioning — the
+# it as the single rolling "flow" GitHub Release. There is no versioning; the
 # `flow` tag is force-moved to the latest commit and re-pushed to update it.
 on:
   push:
@@ -110,15 +110,15 @@ jobs:
           body: |
             ## FLOW
 
-            High-speed input automation for Windows — record/replay macros and a low-latency auto-clicker.
+            High-speed input automation for Windows: record and replay macros, plus a low-latency auto-clicker.
 
             ### Install
             1. Download **`FLOW.exe`** (or the `.zip`) below.
-            2. **Run as Administrator** — FLOW needs elevation for global input hooks. The exe requests it automatically (you'll see a UAC prompt).
+            2. **Run as Administrator.** FLOW needs elevation for global input hooks. The exe requests it automatically, so you'll see a UAC prompt.
             3. If Windows SmartScreen shows *"Windows protected your PC"*: click **More info -> Run anyway**. The app is unsigned; verify the SHA-256 below if you want to be sure.
 
             ### Requirements
-            - Windows 10 or 11 (64-bit). No runtime/dependencies to install — the binary is fully self-contained.
+            - Windows 10 or 11 (64-bit). Nothing to install alongside it; the binary is fully self-contained.
 
             ### Default hotkeys
             | Action | Key |

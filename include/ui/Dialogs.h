@@ -14,7 +14,7 @@ namespace flow::ui {
 
 /**
  * Rebind the four global hotkeys. Edits scratch copies and only commits them to
- * the app state — and re-registers — when the user saves.
+ * the app state, and re-registers, when the user saves.
  */
 void ShowCustomizeHotkeysDialog(HWND hwnd);
 

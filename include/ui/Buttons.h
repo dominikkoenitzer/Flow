@@ -26,7 +26,7 @@ void DrawToggle(DRAWITEMSTRUCT* dis, const wchar_t* label, bool on);
 /** Paint a hotkey capture field showing its current binding. */
 void DrawKeyField(DRAWITEMSTRUCT* dis, const wchar_t* keyText);
 
-/** Paint a dialog button — primary is filled, secondary is outlined. */
+/** Paint a dialog button. Primary is filled, secondary is outlined. */
 void DrawDlgButton(DRAWITEMSTRUCT* dis, const wchar_t* label, bool primary);
 
 }  // namespace flow::ui
