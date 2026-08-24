@@ -1,6 +1,6 @@
 /**
  * @file test_humanization.cpp
- * @brief HumanizationEngine — the Gaussian jitter added to click/playback delays.
+ * @brief HumanizationEngine, the Gaussian jitter added to click/playback delays.
  *
  * The engine is deliberately random, so these assert the properties that have to
  * hold for every draw rather than any particular value: the floor is never

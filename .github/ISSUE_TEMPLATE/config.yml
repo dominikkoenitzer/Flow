@@ -8,4 +8,4 @@ contact_links:
     about: Get the latest FLOW.exe, the zip, and the SHA-256 checksums.
   - name: 🔒 Report a security issue
     url: https://github.com/dominikkoenitzer/Flow/security/advisories/new
-    about: Privately report a vulnerability — please don't open a public issue.
+    about: Privately report a vulnerability. Please don't open a public issue.

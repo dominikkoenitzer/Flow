@@ -1,25 +1,17 @@
 /**
  * @file FlowEngine.h
- * @brief Core engine for the FLOW Input Automation System
- * 
- * @author FLOW Development Team
- * @date 2026-01-21
- * 
- * @copyright Copyright (c) 2026 FLOW Project
- * Licensed under the MIT License
- * 
- * @details
- * FLOW (Flexible Low-latency Operations Workflow) is a high-performance
- * input automation engine for Windows. It provides low-level input capture,
- * precise macro recording/playback, and an advanced auto-clicker with
- * humanization capabilities.
- * 
- * Key Features:
- * - Low-level Windows hooks (WH_MOUSE_LL, WH_KEYBOARD_LL)
- * - SendInput-based output for maximum compatibility
- * - Microsecond-precision timing via QueryPerformanceCounter
- * - Gaussian humanization to bypass pattern detection
- * - Thread-safe concurrent operation
+ * @brief The automation engine: input capture, macro playback, auto-clicker.
+ *
+ * FLOW records mouse and keyboard input through the low-level Windows hooks
+ * (WH_MOUSE_LL, WH_KEYBOARD_LL) and replays it through SendInput, which is what
+ * the widest range of target applications accept. Timing comes from
+ * QueryPerformanceCounter, so the gaps between events survive at microsecond
+ * resolution instead of being rounded to the system tick.
+ *
+ * Playback delays and auto-click intervals pass through HumanizationEngine,
+ * which adds Gaussian jitter so a run is not a byte-exact repeat of the
+ * recording. The engine is touched from the UI thread and from the hook
+ * callbacks at the same time, so its shared state is guarded.
  */
 
 #pragma once
@@ -38,9 +30,7 @@
 
 namespace flow {
 
-// ============================================================================
-// Type Definitions & Constants
-// ============================================================================
+// ---- types and constants ----
 
 /** @brief Minimum allowed click interval in milliseconds */
 constexpr DWORD MIN_CLICK_INTERVAL = 1;
@@ -51,9 +41,7 @@ constexpr DWORD MAX_CLICK_INTERVAL = 10000;
 /** @brief Default click interval in milliseconds */
 constexpr DWORD DEFAULT_CLICK_INTERVAL = 10;
 
-// ============================================================================
-// Input Event Structure
-// ============================================================================
+// ---- InputEvent ----
 
 /**
  * @struct InputEvent
@@ -88,9 +76,7 @@ struct InputEvent {
                    virtualKeyCode(0), timestamp(0), scanCode(0), flags(0) {}
 };
 
-// ============================================================================
-// High-Resolution Timer Class
-// ============================================================================
+// ---- HighResTimer ----
 
 /**
  * @class HighResTimer
@@ -136,9 +122,7 @@ public:
     static void PreciseDelayMs(DWORD milliseconds);
 };
 
-// ============================================================================
-// Humanization Engine
-// ============================================================================
+// ---- HumanizationEngine ----
 
 /**
  * @class HumanizationEngine
@@ -184,9 +168,7 @@ public:
     void SetDistribution(double mean, double stddev);
 };
 
-// ============================================================================
-// FLOW Engine - Main Automation System
-// ============================================================================
+// ---- FlowEngine ----
 
 /**
  * @class FlowEngine

@@ -16,7 +16,7 @@ void RegisterHotkeys();
 void UnregisterHotkeys();
 
 /**
- * A printable name for a virtual-key code — "F8", "Ctrl+F9", "Key 190".
+ * A printable name for a virtual-key code: "F8", "Ctrl+F9", "Key 190".
  * Returns a pointer to a static buffer, so copy it before the next call.
  */
 const char* GetKeyName(UINT vk, bool withModifiers = false);

@@ -2,7 +2,7 @@ name: CI
 
 # Build gate on every push and PR to main. Compiles the Release binary with
 # MinGW (warnings are errors) and verifies it is fully static + manifest-embedded
-# — the same checks the release workflow runs before publishing.
+# The same checks the release workflow runs before publishing.
 on:
   push:
     branches: [main]
@@ -65,7 +65,7 @@ jobs:
           windres resource.rc -O coff -o build/resource.o
 
       # Keep this g++ invocation in sync with scripts/build.ps1 and
-      # .github/workflows/release.yml — all three must match the real build.
+      # .github/workflows/release.yml. All three must match the real build.
       - name: Build (Release, static, warnings as errors)
         run: |
           g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -Werror -mwindows -I include \

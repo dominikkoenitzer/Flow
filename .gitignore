@@ -100,7 +100,7 @@ desktop.ini
 # Release artifacts (scripts/package.ps1 output)
 dist/
 
-# Recorded macros — don't commit personal recordings
+# Recorded macros: don't commit personal recordings
 *.rec
 
 # IDE specific
