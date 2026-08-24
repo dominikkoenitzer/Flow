@@ -1,8 +1,10 @@
 /**
  * @file main.cpp
- * @brief FLOW - Modern Professional UI Design
- * @author FLOW Development Team
- * @version 3.0.0
+ * @brief The main window: layout, painting, hotkey handling and file commands.
+ *
+ * Everything the window owns is wired up here. The drawing primitives, the
+ * owner-draw buttons, the dialogs and the palette each live in their own
+ * translation unit under ui/, and the shared state they all read is AppState.h.
  */
 
 #include "FlowEngine.h"
@@ -32,9 +34,7 @@
 using namespace flow;
 using namespace flow::ui;
 
-// ============================================================================
-// STATUS DISPLAY
-// ============================================================================
+// ---- status display ----
 
 // The header pill and card contents are rendered in WM_PAINT, and the
 // owner-draw buttons reflect record/play/click state, so a refresh invalidates
@@ -47,9 +47,7 @@ void UpdateStatusDisplay() {
     RedrawWindow(g_app.hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
 
-// ============================================================================
-// SETTINGS MENU
-// ============================================================================
+// ---- settings menu ----
 
 // Speed / loops / interval / humanization / continuous now live inline on the
 // cards. The menu only carries the occasional actions.
@@ -78,9 +76,7 @@ void UpdateWindowState() {
                  0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 }
 
-// ============================================================================
-// FILE OPERATIONS
-// ============================================================================
+// ---- file operations ----
 
 void OpenMacroFile(HWND hwnd) {
     wchar_t szFile[MAX_PATH] = {0};
@@ -124,9 +120,7 @@ void SaveMacroFile(HWND hwnd) {
     }
 }
 
-// ============================================================================
-// ACTIONS
-// ============================================================================
+// ---- actions ----
 
 void ToggleRecording(HWND hwnd) {
     if (g_app.isRecording) {
@@ -218,12 +212,8 @@ void StopAll(HWND hwnd) {
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
-// ============================================================================
-// DIALOG BOXES
-// ============================================================================
-// ============================================================================
-// WINDOW PROCEDURE
-// ============================================================================
+// ---- dialogs ----
+// ---- window procedure ----
 
 static void TextLine(HDC hdc, const wchar_t* s, int x, int y, HFONT font, COLORREF color) {
     HFONT old = (HFONT)SelectObject(hdc, font);
@@ -397,7 +387,7 @@ static void PaintUI(HDC hdc, RECT client) {
         TextLine(hdc, rt, cx, Sc(RUNTIME_Y), g_fonts.small_, TEXT_FAINT);
     }
 
-    // ---- auto-clicker (set apart by its own caption — works without a macro) ----
+    // ---- auto-clicker (its own caption; it works without a macro) ----
     TextLine(hdc, L"Click repeatedly at a set interval.",
              cx, Sc(CLK_CAPTION_Y), g_fonts.small_, TEXT_FAINT);
     TextLine(hdc, L"Interval (ms)", cx, Sc(ROW_INTERVAL_Y), g_fonts.body, TEXT_SECONDARY);
@@ -572,9 +562,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
-// ============================================================================
-// CREATE CONTROLS
-// ============================================================================
+// ---- control creation ----
 
 void CreateControls(HWND hwnd) {
     HINSTANCE hi = GetModuleHandle(NULL);
@@ -586,7 +574,7 @@ void CreateControls(HWND hwnd) {
     CreateFlowButton(hwnd, BTN_PLAY, cx, Sc(PLAY_BTN_Y), contentW, Sc(HERO_H), L"Play the recorded macro");
     CreateFlowButton(hwnd, BTN_TOGGLE_CLICKER, cx, Sc(CLK_BTN_Y), contentW, Sc(SEC_BTN_H), L"Start / stop the auto-clicker");
 
-    // Inline numeric edits — borderless, monospace, right-aligned; right edge at CTRL_RIGHT.
+    // Inline numeric edits: borderless, monospace, right-aligned, right edge at CTRL_RIGHT.
     // Pill + hover/focus affordance is painted in PaintUI; hover tracked via InputEditProc.
     auto makeEdit = [&](int id, int x, int y, int w, DWORD extra) -> HWND {
         HWND e = CreateWindowExW(0, L"EDIT", L"",
@@ -624,9 +612,7 @@ void CreateControls(HWND hwnd) {
                  g_app.engine && g_app.engine->GetEventCount() > 0);
 }
 
-// ============================================================================
-// MAIN ENTRY POINT
-// ============================================================================
+// ---- entry point ----
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     // High-DPI awareness for crisp rendering

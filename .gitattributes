@@ -17,13 +17,13 @@
 *.yml      text
 *.yaml     text
 
-# Binary assets — never normalize, never diff as text.
+# Binary assets: never normalize, never diff as text.
 *.png binary
 *.ico binary
 *.exe binary
 *.o   binary
 
-# Recorded macros are raw, compiler-padded structs — binary, not text.
+# Recorded macros are raw, compiler-padded structs, so binary and not text.
 *.rec binary
 
 # Collapse generated/vendored noise in PR diffs and language stats.

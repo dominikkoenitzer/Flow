@@ -1,6 +1,6 @@
 # FLOW
 
-**Flexible Low-latency Operations Workflow** — a fast, lightweight input-automation tool for Windows. Record and replay mouse/keyboard macros and run a high-speed auto-clicker, all from a custom-drawn native UI with no external runtime to install.
+**Flexible Low-latency Operations Workflow.** A fast, lightweight input-automation tool for Windows. Record and replay mouse/keyboard macros and run a high-speed auto-clicker, all from a custom-drawn native UI with no external runtime to install.
 
 [![CI](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml/badge.svg)](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/dominikkoenitzer/Flow?display_name=tag&label=latest)](https://github.com/dominikkoenitzer/Flow/releases/latest)
@@ -13,25 +13,25 @@
   <img src="docs/screenshot.png" alt="The FLOW main window: macro recording, playback controls, and the auto-clicker." width="420">
 </p>
 
-> ⚠️ FLOW must be run **as Administrator**. It installs global low-level input hooks, which Windows only permits for elevated processes. The downloaded `.exe` requests elevation automatically (UAC prompt).
+> FLOW must be run **as Administrator**. It installs global low-level input hooks, which Windows only permits for elevated processes. The downloaded `.exe` requests elevation automatically (UAC prompt).
 
 ## Features
 
-- **Macro recording & playback** — capture mouse moves, clicks, and keystrokes with millisecond timing, then replay them with adjustable speed and loop count (including infinite loops).
-- **High-speed auto-clicker** — a dedicated, high-priority clicker at a configurable interval, independent of recorded macros.
-- **Low-latency timing** — a busy-wait `QueryPerformanceCounter` timer delivers sub-10 ms precision that plain `Sleep` can't.
-- **Humanization** — optional Gaussian jitter on delays to avoid fixed-interval patterns.
-- **Multi-monitor aware** — mouse moves replay as absolute, virtual-desktop-normalized coordinates, so playback lands correctly across displays.
-- **Native, dependency-free UI** — a custom-drawn Win32 + GDI+ window with a light theme, owner-drawn buttons, switches, and inline numeric fields. No framework, no runtime to install.
-- **Quality-of-life** — global hotkeys (fully customizable), drag-and-drop `.rec` files, reopen-last-macro on launch, and a remembered window position.
+- **Macro recording and playback.** Captures mouse moves, clicks and keystrokes with millisecond timing, then replays them with adjustable speed and loop count, infinite loops included.
+- **High-speed auto-clicker.** A dedicated, high-priority clicker at a configurable interval, independent of recorded macros.
+- **Low-latency timing.** A busy-wait `QueryPerformanceCounter` timer gets sub-10 ms precision, which plain `Sleep` cannot.
+- **Humanization.** Optional Gaussian jitter on delays, to avoid fixed-interval patterns.
+- **Multi-monitor aware.** Mouse moves replay as absolute, virtual-desktop-normalized coordinates, so playback lands correctly across displays.
+- **Native, dependency-free UI.** A custom-drawn Win32 and GDI+ window with a light theme, owner-drawn buttons, switches and inline numeric fields. No framework, no runtime to install.
+- **Quality-of-life.** Global hotkeys (fully customizable), drag-and-drop `.rec` files, reopen-last-macro on launch, and a remembered window position.
 
 ## Download
 
 Grab the latest build from the [**Releases**](https://github.com/dominikkoenitzer/Flow/releases) page:
 
-- **`FLOW.exe`** — the standalone executable (recommended). Fully self-contained, no dependencies.
-- **`FLOW-win64.zip`** — the same exe plus this README.
-- **`SHA256SUMS.txt`** — checksums to verify your download.
+- **`FLOW.exe`**, the standalone executable, and the one you probably want. Fully self-contained.
+- **`FLOW-win64.zip`**, the same exe plus this README.
+- **`SHA256SUMS.txt`**, checksums to verify your download.
 
 ### "Windows protected your PC" (SmartScreen)
 
@@ -54,7 +54,7 @@ Some antivirus engines may also flag automation tools that use global input hook
 - Windows 10 or Windows 11 (64-bit)
 - Administrator rights (for input hooks)
 
-No Visual C++ redistributable, no MinGW runtime, nothing else — the binary is statically linked.
+No Visual C++ redistributable, no MinGW runtime, nothing else. The binary is statically linked.
 
 ## Default hotkeys
 
@@ -103,17 +103,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, coding co
 
 | Path | What it is |
 |---|---|
-| `src/main.cpp` | The window procedure, control creation and `WinMain` — the Win32 shell. |
+| `src/main.cpp` | The window procedure, control creation and `WinMain`: the Win32 shell. |
 | `src/AppState.cpp` / `include/AppState.h` | Control IDs, cached fonts, and the single `AppState` the whole GUI reads. |
 | `src/Settings.cpp` / `include/Settings.h` | `%APPDATA%\FLOW\settings.cfg` load/save. |
 | `src/Hotkeys.cpp` / `include/Hotkeys.h` | The four global hotkeys and key-name formatting. |
-| `src/ui/Theme.h` | The design system: palette, layout grid, DPI scaling. One source for painting *and* control placement. |
+| `src/ui/Theme.h` | The design system: palette, layout grid, DPI scaling. One source for both painting and control placement. |
 | `src/ui/Draw.cpp` / `include/ui/Draw.h` | Anti-aliased GDI+ primitives and the vector glyphs. |
 | `src/ui/Buttons.cpp` / `include/ui/Buttons.h` | The owner-draw buttons, toggles and key fields. |
 | `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
 | `src/FlowEngine.cpp` / `include/FlowEngine.h` | UI-agnostic engine (`flow` namespace): recording, playback, auto-clicker, timing, humanization. |
 | `resource.rc` / `FLOW.manifest` | App icon + manifest (admin elevation, visual styles, DPI awareness), embedded via `windres`. |
-| `tests/` | doctest suite over the engine — humanization, the .rec format, timing. |
+| `tests/` | doctest suite over the engine: humanization, the .rec format, timing. |
 | `scripts/build.ps1` | Build script (Release/Debug) wrapping the g++ invocation. |
 | `scripts/test.ps1` | Builds and runs the test suite. |
 | `scripts/package.ps1` | Produces the release artifacts (zip + exe + SHA-256) locally. |
@@ -122,7 +122,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, coding co
 
 ## Cutting a release
 
-There's a single, **unversioned** release — **`flow`** — that always holds the latest build. No version numbers, no per-release codenames.
+There is a single **unversioned** release, **`flow`**, which always holds the latest build. No version numbers, no per-release codenames.
 
 Releases are fully automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). To (re)publish, force-move the `flow` tag onto the latest commit and push it; the workflow builds, verifies the binary is self-contained, and **updates** the GitHub Release titled *FLOW* with the exe, zip, and checksums attached:
 
@@ -149,6 +149,6 @@ FLOW is intended for legitimate automation of repetitive tasks. You are responsi
 
 ## Author
 
-**dominikkoenitzer** — software engineer in Zürich, Switzerland.
+**dominikkoenitzer**, software engineer in Zürich, Switzerland.
 
 [dk.punds.ch](https://dk.punds.ch) · [CV](https://dk.punds.ch/cv) · [@dominikkoenitzer](https://github.com/dominikkoenitzer) · [dominikkoenitzer@users.noreply.github.com](mailto:dominikkoenitzer@users.noreply.github.com)
