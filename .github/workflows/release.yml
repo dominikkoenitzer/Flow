@@ -92,7 +92,7 @@ jobs:
           (cd dist && sha256sum "$DIST.zip" "$DIST/FLOW.exe" | tee "SHA256SUMS.txt")
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: FLOW
           tag_name: ${{ steps.ver.outputs.version }}
