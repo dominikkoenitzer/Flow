@@ -34,8 +34,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Run the JavaScript actions on Node 24 (matches release.yml; clears the Node 20
-# deprecation warning without bumping the action versions).
+# Force any JavaScript action that still declares Node 20 onto Node 24. Every
+# action used below already targets Node 24, so this is only a backstop.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
