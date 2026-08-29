@@ -18,9 +18,8 @@ on:
 permissions:
   contents: write
 
-# Run the JavaScript actions on Node 24 (GitHub makes this the default on
-# 2026-06-16). Clears the Node 20 deprecation warning without risky version bumps
-# to the working checkout / setup-msys2 / action-gh-release actions.
+# Force any JavaScript action that still declares Node 20 onto Node 24. Every
+# action used below already targets Node 24, so this is only a backstop.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
