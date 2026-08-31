@@ -341,10 +341,10 @@ void ShowAboutDialog(HWND hwnd) {
     HWND body = CreateWindowExW(0, L"STATIC",
         L"A macro recorder, player, and high-speed auto-clicker.\r\n\r\n"
         L"Default hotkeys\r\n"
-        L"F8  —  Start / stop recording\r\n"
-        L"F9  —  Start / stop playback\r\n"
-        L"F6  —  Toggle auto-clicker\r\n"
-        L"Pause  —  Stop everything\r\n\r\n"
+        L"F8:  Start / stop recording\r\n"
+        L"F9:  Start / stop playback\r\n"
+        L"F6:  Toggle auto-clicker\r\n"
+        L"Pause:  Stop everything\r\n\r\n"
         L"Settings are saved between sessions.",
         WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(100), Sc(W - 2 * padX), Sc(180),
         hDlg, (HMENU)IDC_ABOUT_BODY, hi, NULL);
