@@ -13,11 +13,10 @@ FLOW ships as a single rolling line of named releases. Only the **latest publish
 
 **Please do not open a public issue for security vulnerabilities.**
 
-Report privately using one of:
+Report privately:
 
-1. **GitHub Security Advisories**, preferred. Open a private report at
+**GitHub Security Advisories.** Open a private report at
    <https://github.com/dominikkoenitzer/Flow/security/advisories/new>.
-2. **Email** dominikkoenitzer@users.noreply.github.com with a clear description and reproduction steps.
 
 Please include:
 
