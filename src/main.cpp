@@ -137,7 +137,7 @@ void ToggleRecording(HWND hwnd) {
             SetWindowTextA(hwnd, "FLOW - Recording...");
         } else {
             MessageBoxW(hwnd,
-                L"Couldn't start recording — input hooks failed to install.\n\n"
+                L"Couldn't start recording. The input hooks failed to install.\n\n"
                 L"Make sure FLOW is running as Administrator.",
                 L"Recording", MB_OK | MB_ICONWARNING);
         }
