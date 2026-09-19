@@ -54,7 +54,7 @@ void HighResTimer::PreciseSleep(DWORD microseconds) {
     } while ((end.QuadPart - start.QuadPart) < targetTicks);
 }
 
-void HighResTimer::PreciseDelayMs(DWORD milliseconds) {
+void HighResTimer::PreciseDelayMs(DWORD milliseconds, const std::atomic<bool>* cancel) {
     if (milliseconds == 0) return;
 
     LARGE_INTEGER freq, start, now;
@@ -64,10 +64,20 @@ void HighResTimer::PreciseDelayMs(DWORD milliseconds) {
 
     // Sleep away the bulk of the wait so we don't spin a CPU core; keep only a
     // ~2ms tail to busy-wait for precision. For long delays this costs ~0% CPU.
+    // The sleep is sliced so a caller that passes a cancel flag can stop during
+    // a long pause instead of waiting the whole gap out; the busy-wait still
+    // corrects against the absolute target, so timing is unchanged.
     if (milliseconds > 2) {
-        Sleep(milliseconds - 2);
+        DWORD remaining = milliseconds - 2;
+        while (remaining > 0) {
+            if (cancel && cancel->load()) return;
+            const DWORD slice = remaining > 50 ? 50 : remaining;
+            Sleep(slice);
+            remaining -= slice;
+        }
     }
     do {
+        if (cancel && cancel->load()) return;
         QueryPerformanceCounter(&now);
     } while (now.QuadPart < target);
 }
@@ -354,9 +364,10 @@ void FlowEngine::StartPlayback(int loops) {
 }
 
 void FlowEngine::StopPlayback() {
-    if (!isPlaying.load()) return;
-
     shouldStopPlayback.store(true);
+
+    // The thread clears isPlaying itself when the loops finish, but stays
+    // joinable until it is joined, so the flag can't gate this.
     if (playbackThread.joinable()) {
         playbackThread.join();
     }
@@ -402,7 +413,7 @@ void FlowEngine::PlaybackThreadFunction() {
             }
 
             if (timeDiff > 0) {
-                HighResTimer::PreciseDelayMs(timeDiff);
+                HighResTimer::PreciseDelayMs(timeDiff, &shouldStopPlayback);
             }
 
             INPUT input = {};
@@ -560,10 +571,17 @@ bool FlowEngine::LoadMacro(const std::wstring& filename) {
     recordedEvents.clear();
     recordedEvents.reserve(count);
 
+    // Playback subtracts consecutive timestamps, so one that moves backwards
+    // underflows that DWORD into a delay of weeks. Reject the file rather than
+    // rewrite it: a long pause is something a recording may legitimately hold,
+    // and playback can now be stopped during one.
+    DWORD lastTimestamp = 0;
     for (size_t i = 0; i < count; ++i) {
         InputEvent event;
         file.read(reinterpret_cast<char*>(&event), sizeof(InputEvent));
         if (!file) { recordedEvents.clear(); return false; }  // truncated
+        if (event.timestamp < lastTimestamp) { recordedEvents.clear(); return false; }
+        lastTimestamp = event.timestamp;
         recordedEvents.push_back(event);
     }
 

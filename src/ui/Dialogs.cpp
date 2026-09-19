@@ -30,6 +30,29 @@ namespace flow::ui {
 #define IDC_HK_SUBTITLE 9001
 #define IDC_HK_INSTRUCTION 9002
 
+// Every dialog shares window class #32770, so the themed background is a
+// class-wide patch: while one of ours is open, anything else on that class
+// paints on BG_PRIMARY too, including the hotkey error boxes below, which keep
+// the system text colours. Patches are counted so overlapping dialogs restore
+// in any order and the last one out puts the original brush back.
+static HBRUSH g_dlgPrevBrush = nullptr;
+static int g_dlgBrushDepth = 0;
+
+static void PatchDialogClassBrush(HWND hDlg) {
+    HBRUSH prev = (HBRUSH)SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND,
+                                           (LONG_PTR)CreateSolidBrush(BG_PRIMARY));
+    if (g_dlgBrushDepth++ == 0) g_dlgPrevBrush = prev;
+    else if (prev) DeleteObject(prev);
+}
+
+static void RestoreDialogClassBrush(HWND hDlg) {
+    if (g_dlgBrushDepth == 0 || --g_dlgBrushDepth > 0) return;
+    HBRUSH bg = (HBRUSH)SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND,
+                                         (LONG_PTR)g_dlgPrevBrush);
+    if (bg) DeleteObject(bg);
+    g_dlgPrevBrush = nullptr;
+}
+
 // Hotkey dialog callback
 LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -108,12 +131,14 @@ LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM 
             DestroyWindow(hDlg);
             break;
 
-        case WM_DESTROY:
+        case WM_DESTROY: {
+            RestoreDialogClassBrush(hDlg);
             g_hHotkeyRecordEdit = NULL;
             g_hHotkeyPlaybackEdit = NULL;
             g_hHotkeyClickerEdit = NULL;
             g_hHotkeyStopEdit = NULL;
             break;
+        }
     }
     return 0;
 }
@@ -189,7 +214,7 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     }
 
     HINSTANCE hi = GetModuleHandle(NULL);
-    SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(BG_PRIMARY));
+    PatchDialogClassBrush(hDlg);
 
     // Layout in design units (scaled via Sc).
     const int W = 460, H = 446, padX = 28;
@@ -305,6 +330,9 @@ LRESULT CALLBACK AboutDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM l
         case WM_CLOSE:
             DestroyWindow(hDlg);
             break;
+        case WM_DESTROY:
+            RestoreDialogClassBrush(hDlg);
+            break;
     }
     return 0;
 }
@@ -325,7 +353,7 @@ void ShowAboutDialog(HWND hwnd) {
     if (!hDlg) return;
 
     HINSTANCE hi = GetModuleHandle(NULL);
-    SetClassLongPtrW(hDlg, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(BG_PRIMARY));
+    PatchDialogClassBrush(hDlg);
 
     const int W = 440, H = 372, padX = 28;
 
