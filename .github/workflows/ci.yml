@@ -29,10 +29,11 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs on the same ref so only the latest commit is built.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A second push to the default branch used to cancel the run for the first one, so that commit was never
+  # checked by anything. Only a superseded pull request push is safe to drop.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Force any JavaScript action that still declares Node 20 onto Node 24. Every
 # action used below already targets Node 24, so this is only a backstop.
