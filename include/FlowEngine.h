@@ -119,7 +119,7 @@ public:
      *       busy-wait this does not peg a CPU core for long intervals, while
      *       still keeping sub-millisecond accuracy for clicker/playback timing.
      */
-    static void PreciseDelayMs(DWORD milliseconds);
+    static void PreciseDelayMs(DWORD milliseconds, const std::atomic<bool>* cancel = nullptr);
 };
 
 // ---- HumanizationEngine ----
