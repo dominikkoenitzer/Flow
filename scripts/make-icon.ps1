@@ -2,8 +2,8 @@
 # Regenerates the app icon (Flow.ico) and the hero brand image (Flow.png) from
 # code, so the mark is reproducible/editable rather than an opaque binary blob.
 #
-# The mark: a white fast-forward double-chevron on the brand-blue squircle tile
-# (#3B82F6 -> #2563EB, matching ACCENT_HOVER -> ACCENT_PRIMARY in src/main.cpp).
+# The mark: recorded input drawn as seven white bars on a pastel-blue squircle
+# tile, the tallest in the middle and each half mirroring the other.
 # Pure GDI+ via System.Drawing -- no external tools or image editors needed.
 #
 # Usage:
@@ -26,8 +26,8 @@ if ($OutIco  -eq '') { $OutIco  = Join-Path $ProjectRoot 'Flow.ico' }
 if ($OutHero -eq '') { $OutHero = Join-Path $ProjectRoot 'Flow.png' }
 
 # --- Brand colors -----------------------------------------------------------
-$ColTop    = [System.Drawing.Color]::FromArgb(255, 59, 130, 246)   # #3B82F6 blue-500
-$ColBottom = [System.Drawing.Color]::FromArgb(255, 37,  99, 235)   # #2563EB blue-600
+$ColTop    = [System.Drawing.Color]::FromArgb(255, 188, 213, 255)  # #BCD5FF
+$ColBottom = [System.Drawing.Color]::FromArgb(255, 126, 163, 244)  # #7EA3F4
 $ColWhite  = [System.Drawing.Color]::FromArgb(255,255,255,255)
 
 # --- Geometry helpers (coords are fractions of the icon size S) -------------
@@ -47,33 +47,24 @@ function Draw-Tile($g, [int]$S) {
     $tile = New-RoundedRectPath 0 0 $S $S ([single]($S * 0.225))   # iOS-ish squircle
     $grad = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $ColTop, $ColBottom, [System.Drawing.Drawing2D.LinearGradientMode]::ForwardDiagonal)
     $g.FillPath($grad, $tile)
-    # subtle top sheen
-    $g.SetClip($tile)
-    $sheenRect = New-Object System.Drawing.RectangleF(0, 0, $S, [single]($S * 0.6))
-    $sg = New-Object System.Drawing.Drawing2D.LinearGradientBrush($sheenRect, [System.Drawing.Color]::FromArgb(40,255,255,255), [System.Drawing.Color]::FromArgb(0,255,255,255), [System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
-    $g.FillRectangle($sg, $sheenRect)
-    $g.ResetClip()
-    $grad.Dispose(); $sg.Dispose(); $tile.Dispose()
+    $grad.Dispose(); $tile.Dispose()
 }
 
-# Fast-forward double chevron: bold stroke, clear ~1-stroke channel between the
-# two chevrons (holds at 16px), ~90 deg apex, rounded caps, pair nudged 1% left.
-function Draw-Chevron($g, [int]$S) {
-    $stroke = 0.110; $w = 0.195; $h = 0.205; $spacing = 0.215; $startX = 0.285; $ym = 0.5
-    $pen = New-Object System.Drawing.Pen($ColWhite, [single]($S * $stroke))
-    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-    foreach ($c in 0,1) {
-        $xl = $startX + $c * $spacing
-        $pts = [System.Drawing.PointF[]]@(
-            (New-Object System.Drawing.PointF([single](($xl)*$S),      [single](($ym-$h)*$S))),
-            (New-Object System.Drawing.PointF([single](($xl+$w)*$S),   [single](($ym)*$S))),
-            (New-Object System.Drawing.PointF([single](($xl)*$S),      [single](($ym+$h)*$S)))
-        )
-        $g.DrawLines($pen, $pts)
+# Seven capsule bars, mirrored around the tallest one in the middle. Widths,
+# gaps and heights are fractions of the tile.
+function Draw-Bars($g, [int]$S) {
+    $heights = 0.183, 0.326, 0.239, 0.461, 0.239, 0.326, 0.183
+    $w = 0.0696; $gap = 0.0304
+    $left = (1 - ($heights.Count * $w + ($heights.Count - 1) * $gap)) / 2
+    $brush = New-Object System.Drawing.SolidBrush($ColWhite)
+    for ($i = 0; $i -lt $heights.Count; $i++) {
+        $x = ($left + $i * ($w + $gap)) * $S
+        $h = $heights[$i] * $S
+        $bar = New-RoundedRectPath ([single]$x) ([single](($S - $h) / 2)) ([single]($w * $S)) ([single]$h) ([single]($w * $S / 2))
+        $g.FillPath($brush, $bar)
+        $bar.Dispose()
     }
-    $pen.Dispose()
+    $brush.Dispose()
 }
 
 function New-IconBitmap([int]$S) {
@@ -84,7 +75,7 @@ function New-IconBitmap([int]$S) {
     $g.PixelOffsetMode    = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.Clear([System.Drawing.Color]::Transparent)
     Draw-Tile $g $S
-    Draw-Chevron $g $S
+    Draw-Bars $g $S
     $g.Dispose()
     $bmp
 }
