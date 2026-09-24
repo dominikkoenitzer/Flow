@@ -13,7 +13,7 @@
   <img src="docs/screenshot.png" alt="The FLOW main window: macro recording, playback controls, and the auto-clicker." width="420">
 </p>
 
-> FLOW must be run **as Administrator**. It installs global low-level input hooks, which Windows only permits for elevated processes. The downloaded `.exe` requests elevation automatically (UAC prompt).
+> FLOW runs **as Administrator**, and the downloaded `.exe` asks for it automatically (UAC prompt). Windows does not let a normal process replay input into a window that runs as Administrator (Task Manager, an elevated terminal, most installers) or record input while one has focus; elevated, FLOW works in every window.
 
 ## Features
 
@@ -52,7 +52,7 @@ Some antivirus engines may also flag automation tools that use global input hook
 ## Requirements
 
 - Windows 10 or Windows 11 (64-bit)
-- Administrator rights (for input hooks)
+- Administrator rights (so recording and playback reach elevated windows too)
 
 No Visual C++ redistributable, no MinGW runtime, nothing else. The binary is statically linked.
 
