@@ -54,13 +54,13 @@ FLOW needs **Administrator privileges** for its global low-level input hooks. La
 | `src/AppState.cpp` / `include/AppState.h` | Control IDs, cached fonts, and the single `AppState` the whole GUI reads. |
 | `src/Settings.cpp` / `include/Settings.h` | `%APPDATA%\FLOW\settings.cfg` load/save. |
 | `src/Hotkeys.cpp` / `include/Hotkeys.h` | The four global hotkeys and key-name formatting. |
-| `src/ui/Theme.h` | The design system: palette, layout grid, DPI scaling. |
+| `include/ui/Theme.h` | The design system: palette, layout grid, DPI scaling. |
 | `src/ui/Draw.cpp` / `include/ui/Draw.h` | Anti-aliased GDI+ primitives and the vector glyphs. |
 | `src/ui/Buttons.cpp` / `include/ui/Buttons.h` | The owner-draw buttons, toggles and key fields. |
 | `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
 | `src/FlowEngine.cpp` / `include/FlowEngine.h` | UI-agnostic engine (`flow` namespace). |
 | `resource.rc` / `FLOW.manifest` | Icon + manifest, embedded via `windres`. |
-| `scripts/` | `build.ps1`, `package.ps1`. |
+| `scripts/` | `build.ps1`, `test.ps1`, `package.ps1`, `make-icon.ps1` (redraws `Flow.ico` and `Flow.png`). |
 
 ## Tests
 
