@@ -7,7 +7,7 @@ Thanks for your interest in FLOW. This is a small, focused Windows-only project,
 ## Prerequisites
 
 - **Windows 10 or 11 (64-bit).** FLOW is Windows-only and uses raw Win32 APIs.
-- **MinGW-w64 g++ (C++17)** on your `PATH`. The CI and releases use the MSYS2 `MINGW64` toolchain (`mingw-w64-x86_64-gcc`); a matching local install is recommended. MSVC is **not** supported.
+- **MinGW-w64 g++ (C++17)** on your `PATH`. The CI and releases use the MSYS2 `UCRT64` toolchain (`mingw-w64-ucrt-x86_64-gcc`); a matching local install is recommended. MSVC is **not** supported.
 - `windres` (ships with MinGW/MSYS2) to embed the icon + manifest.
 
 Verify your toolchain:
