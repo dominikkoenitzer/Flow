@@ -122,11 +122,18 @@ static void DisableDialogAutoDpi(HWND hDlg) {
     if (fn) fn(hDlg, 1 /* DDC_DISABLE_ALL */, 1);
 }
 
-// A dialog dragged onto a monitor with another scale: rebuild its fonts and
-// layout for the new DPI, take the rectangle Windows suggests, repaint.
-// Returns true when `msg` was handled here.
+// A dialog dragged onto a monitor with another scale. WM_GETDPISCALEDSIZE
+// reports the exact frame around the dialog's client area (w x h design units)
+// at the new DPI, so the rectangle WM_DPICHANGED suggests fits to the pixel;
+// WM_DPICHANGED rebuilds the fonts and layout, takes that rectangle and
+// repaints. Returns true when `msg` was handled here.
 static bool HandleDialogDpi(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam,
-                            DialogScale& s, void (*layout)(HWND)) {
+                            DialogScale& s, int w, int h, void (*layout)(HWND)) {
+    if (msg == WM_GETDPISCALEDSIZE) {
+        *(SIZE*)lParam = DialogFrame(hDlg, w, h, (UINT)wParam);
+        SetWindowLongPtrW(hDlg, DWLP_MSGRESULT, TRUE);   // a dialog's reply goes here
+        return true;
+    }
     if (msg != WM_DPICHANGED) return false;
     ScaleDialog(hDlg, s, LOWORD(wParam), layout);
     const RECT* r = (const RECT*)lParam;
@@ -203,7 +210,8 @@ static void RestoreDialogClassBrush(HWND hDlg) {
 
 // Hotkey dialog callback
 LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (HandleDialogDpi(hDlg, msg, wParam, lParam, s_hotkeyScale, LayoutHotkeyDialog))
+    if (HandleDialogDpi(hDlg, msg, wParam, lParam, s_hotkeyScale, HK_W, HK_H,
+                        LayoutHotkeyDialog))
         return TRUE;
     switch (msg) {
         case WM_CTLCOLORSTATIC: {
@@ -449,7 +457,8 @@ static void LayoutAboutDialog(HWND hDlg) {
 }
 
 LRESULT CALLBACK AboutDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (HandleDialogDpi(hDlg, msg, wParam, lParam, s_aboutScale, LayoutAboutDialog))
+    if (HandleDialogDpi(hDlg, msg, wParam, lParam, s_aboutScale, ABOUT_W, ABOUT_H,
+                        LayoutAboutDialog))
         return TRUE;
     switch (msg) {
         case WM_CTLCOLORSTATIC: {
