@@ -52,7 +52,7 @@ enum ControlID {
     TIMER_STATUS_CHECK = 500,
 };
 
-/** Cached UI fonts (created in WinMain, destroyed at exit). */
+/** Cached UI fonts, all sized for one DPI (see CreateUiFonts). */
 struct UiFonts {
     HFONT wordmark = nullptr;  // bold brand
     HFONT cardTitle = nullptr; // small uppercase section label
@@ -64,6 +64,12 @@ struct UiFonts {
     HFONT mono = nullptr;      // monospace numerics
 };
 extern UiFonts g_fonts;
+
+/** Create every font in `f` at the current g_scale. */
+void CreateUiFonts(UiFonts& f);
+
+/** Delete every font in `f` and null its handles. */
+void DeleteUiFonts(UiFonts& f);
 
 struct AppState {
     HWND hwnd = nullptr;
