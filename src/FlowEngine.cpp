@@ -7,6 +7,8 @@
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
+#include <cstring>
+#include <iterator>
 
 namespace flow {
 
@@ -635,82 +637,126 @@ void FlowEngine::PlaybackThreadFunction() {
 
 // ---- persistence ----
 
+namespace {
+
+// The highest InputEvent::Type each format version can hold.
+constexpr uint32_t LAST_TYPE_V1 = static_cast<uint32_t>(InputEvent::Type::KEY_UP);
+constexpr uint32_t LAST_TYPE_V2 = static_cast<uint32_t>(InputEvent::Type::KEY_UP);
+
+template <typename T>
+void put(std::string& out, T value) {
+    out.append(reinterpret_cast<const char*>(&value), sizeof(value));
+}
+
+template <typename T>
+T get(const char*& in) {
+    T value;
+    std::memcpy(&value, in, sizeof(value));
+    in += sizeof(value);
+    return value;
+}
+
+// One event of the given version from exactly its record size of bytes.
+// False when the type is not one that version can hold.
+bool decodeEvent(const char* in, uint32_t version, InputEvent& event) {
+    const uint32_t type = get<uint32_t>(in);
+    if (type > (version == 1 ? LAST_TYPE_V1 : LAST_TYPE_V2)) return false;
+    event.type = static_cast<InputEvent::Type>(type);
+    event.screenCoords.x = get<int32_t>(in);
+    event.screenCoords.y = get<int32_t>(in);
+    event.virtualKeyCode = get<uint32_t>(in);
+    event.timestamp = get<uint32_t>(in);
+    event.scanCode = get<uint32_t>(in);
+    event.flags = get<uint32_t>(in);
+    event.mouseData = version == 1 ? 0 : get<int32_t>(in);
+    return true;
+}
+
+}  // namespace
+
 bool FlowEngine::SaveMacro(const std::wstring& filename) {
+    std::string bytes = "FLOW";
+    put<uint64_t>(bytes, MACRO_VERSION_MARKER);
+    put<uint32_t>(bytes, MACRO_FORMAT_VERSION);
+    {
+        std::lock_guard<std::mutex> lock(recordMutex);
+        put<uint64_t>(bytes, recordedEvents.size());
+        for (const auto& event : recordedEvents) {
+            put<uint32_t>(bytes, static_cast<uint32_t>(event.type));
+            put<int32_t>(bytes, event.screenCoords.x);
+            put<int32_t>(bytes, event.screenCoords.y);
+            put<uint32_t>(bytes, event.virtualKeyCode);
+            put<uint32_t>(bytes, event.timestamp);
+            put<uint32_t>(bytes, event.scanCode);
+            put<uint32_t>(bytes, event.flags);
+            put<int32_t>(bytes, event.mouseData);
+        }
+    }
+
     // Open by the wide path. A narrow path is read in the ANSI code page, so a
     // name outside it would be garbled and the file saved under the wrong name.
     std::ofstream file(std::filesystem::path(filename), std::ios::binary);
     if (!file.is_open()) return false;
-
-    // Write header
-    const char magic[4] = {'F', 'L', 'O', 'W'};
-    file.write(magic, 4);
-
-    // Write event count
-    size_t count = recordedEvents.size();
-    file.write(reinterpret_cast<const char*>(&count), sizeof(count));
-
-    // Write events
-    for (const auto& event : recordedEvents) {
-        file.write(reinterpret_cast<const char*>(&event), sizeof(InputEvent));
-    }
-
+    file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     file.close();
-    return true;
+    return !file.fail();  // a full disk fails the write or the flush on close
 }
 
 bool FlowEngine::LoadMacro(const std::wstring& filename) {
     std::ifstream file(std::filesystem::path(filename), std::ios::binary);
     if (!file.is_open()) return false;
 
-    // Measure the file so we can sanity-check the declared event count.
-    file.seekg(0, std::ios::end);
-    const std::streamoff fileSize = file.tellg();
-    file.seekg(0, std::ios::beg);
+    // Read the whole file: the largest real macro is a few megabytes, and the
+    // size bounds every count check below.
+    const std::string bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    const char* in = bytes.data();
+    size_t left = bytes.size();
 
-    const std::streamoff headerSize =
-        4 + static_cast<std::streamoff>(sizeof(size_t));
-    if (fileSize < headerSize) return false;  // too small to be valid
+    if (left < 4 + sizeof(uint64_t) || std::memcmp(in, "FLOW", 4) != 0) return false;
+    in += 4;
+    left -= 4;
 
-    // Verify magic header
-    char magic[4];
-    file.read(magic, 4);
-    if (!file || magic[0] != 'F' || magic[1] != 'L' || magic[2] != 'O' || magic[3] != 'W') {
-        return false;
+    uint32_t version = 1;
+    uint64_t count = get<uint64_t>(in);
+    left -= sizeof(uint64_t);
+    if (count == MACRO_VERSION_MARKER) {
+        if (left < sizeof(uint32_t) + sizeof(uint64_t)) return false;
+        version = get<uint32_t>(in);
+        // Only a version this build writes. A newer one may carry events it
+        // cannot replay; an older explicit one was never written.
+        if (version != MACRO_FORMAT_VERSION) return false;
+        count = get<uint64_t>(in);
+        left -= sizeof(uint32_t) + sizeof(uint64_t);
     }
-
-    // Read event count
-    size_t count = 0;
-    file.read(reinterpret_cast<char*>(&count), sizeof(count));
-    if (!file) return false;
 
     // Reject a count that can't fit in the remaining bytes. Without this, a
     // corrupt/truncated/hostile .rec file (e.g. a partial download) could carry
     // a garbage count and make reserve() attempt a huge allocation -> bad_alloc
     // -> crash. This bounds the count to what the payload can actually contain.
-    const std::streamoff payload = fileSize - headerSize;
-    const size_t maxEvents =
-        static_cast<size_t>(payload / static_cast<std::streamoff>(sizeof(InputEvent)));
-    if (count > maxEvents) return false;
+    const size_t recordSize = version == 1 ? MACRO_EVENT_SIZE_V1 : MACRO_EVENT_SIZE_V2;
+    if (count > left / recordSize) return false;
 
-    // Load events
-    std::lock_guard<std::mutex> lock(recordMutex);
-    recordedEvents.clear();
-    recordedEvents.reserve(count);
+    // Decode into a scratch buffer, so a file that fails part way through
+    // leaves the macro already loaded as it was, not half replaced.
+    std::vector<InputEvent> loaded;
+    loaded.reserve(static_cast<size_t>(count));
 
     // Playback subtracts consecutive timestamps, so one that moves backwards
     // underflows that DWORD into a delay of weeks. Reject the file rather than
     // rewrite it: a long pause is something a recording may legitimately hold,
     // and playback can now be stopped during one.
     DWORD lastTimestamp = 0;
-    for (size_t i = 0; i < count; ++i) {
+    for (uint64_t i = 0; i < count; ++i) {
         InputEvent event;
-        file.read(reinterpret_cast<char*>(&event), sizeof(InputEvent));
-        if (!file) { recordedEvents.clear(); return false; }  // truncated
-        if (event.timestamp < lastTimestamp) { recordedEvents.clear(); return false; }
+        if (!decodeEvent(in, version, event)) return false;
+        in += recordSize;
+        if (event.timestamp < lastTimestamp) return false;
         lastTimestamp = event.timestamp;
-        recordedEvents.push_back(event);
+        loaded.push_back(event);
     }
 
+    std::lock_guard<std::mutex> lock(recordMutex);
+    recordedEvents.swap(loaded);
     return true;
 }
 

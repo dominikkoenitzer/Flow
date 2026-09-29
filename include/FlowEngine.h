@@ -27,6 +27,8 @@
 #include <random>
 #include <chrono>
 #include <functional>
+#include <cstdint>
+#include <string>
 
 namespace flow {
 
@@ -70,11 +72,40 @@ struct InputEvent {
     DWORD timestamp;            ///< Relative timestamp in milliseconds
     DWORD scanCode;             ///< Hardware scan code
     DWORD flags;                ///< Additional event flags
+    LONG mouseData;             ///< Wheel delta or X button number (for mouse events)
 
     /** @brief Default constructor initializes all fields to safe defaults */
-    InputEvent() : type(Type::MOUSE_MOVE), screenCoords{0, 0}, 
-                   virtualKeyCode(0), timestamp(0), scanCode(0), flags(0) {}
+    InputEvent() : type(Type::MOUSE_MOVE), screenCoords{0, 0},
+                   virtualKeyCode(0), timestamp(0), scanCode(0), flags(0), mouseData(0) {}
 };
+
+// ---- .rec file format ----
+//
+// Every field is written at a fixed width, little-endian, one after another.
+//
+//   version 2 (current)                 version 1 (unversioned, before 2026-09)
+//   "FLOW"                              "FLOW"
+//   u64 0xFFFFFFFFFFFFFFFF  marker      u64 event count
+//   u32 format version                  28-byte events: type, x, y, virtual key,
+//   u64 event count                     timestamp, scan code, flags
+//   32-byte events: the same seven
+//   fields, then i32 mouse data
+//
+// A version 1 file cannot start with the marker: its count would need more
+// bytes than any file can hold. So the marker tells the two apart, old files
+// still load, and a version newer than this build knows is refused.
+
+/** @brief Format version written by SaveMacro */
+constexpr uint32_t MACRO_FORMAT_VERSION = 2;
+
+/** @brief Bytes per event in a version 1 file */
+constexpr size_t MACRO_EVENT_SIZE_V1 = 28;
+
+/** @brief Bytes per event in a version 2 file */
+constexpr size_t MACRO_EVENT_SIZE_V2 = 32;
+
+/** @brief What follows "FLOW" in a versioned file, before the version */
+constexpr uint64_t MACRO_VERSION_MARKER = 0xFFFFFFFFFFFFFFFFULL;
 
 // ---- HighResTimer ----
 
