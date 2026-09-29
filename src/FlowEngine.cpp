@@ -104,7 +104,7 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
 // ---- construction and teardown ----
 
 FlowEngine::FlowEngine()
-    : isRecording(false), recordingStartTime(0), controlKeys{}, isClicking(false),
+    : isRecording(false), recordingStartTime(0), controlKeys{}, skippedPress{}, isClicking(false),
       clickInterval(DEFAULT_CLICK_INTERVAL), isPlaying(false), shouldStopPlayback(false),
       loopCount(1), currentLoopIteration(0), playbackSpeed(1.0), humanizationEnabled(true) {
     instance = this;
@@ -186,6 +186,16 @@ LRESULT CALLBACK FlowEngine::KeyboardHookProc(int nCode, WPARAM wParam, LPARAM l
 
 // ---- event recording ----
 
+// True when the window under a screen point belongs to this process: the main
+// window, its buttons, and the menus and dialogs it opens.
+static bool IsOwnWindowAt(POINT pt) {
+    HWND hwnd = WindowFromPoint(pt);
+    if (!hwnd) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    return pid == GetCurrentProcessId();
+}
+
 void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
     InputEvent event;
     event.screenCoords = mouseStruct->pt;
@@ -216,6 +226,31 @@ void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
             break;
         default:
             return;
+    }
+
+    // A click on one of FLOW's own windows is the user driving FLOW, not part
+    // of the macro. Replayed, it would press FLOW's buttons again: Record would
+    // start a new recording and wipe this macro. Leave the press out, and its
+    // release with it, so no half click is replayed.
+    int button = -1;
+    bool press = false;
+    switch (event.type) {
+        case InputEvent::Type::MOUSE_LEFT_DOWN:   button = 0; press = true; break;
+        case InputEvent::Type::MOUSE_LEFT_UP:     button = 0; break;
+        case InputEvent::Type::MOUSE_RIGHT_DOWN:  button = 1; press = true; break;
+        case InputEvent::Type::MOUSE_RIGHT_UP:    button = 1; break;
+        case InputEvent::Type::MOUSE_MIDDLE_DOWN: button = 2; press = true; break;
+        case InputEvent::Type::MOUSE_MIDDLE_UP:   button = 2; break;
+        default: break;
+    }
+    if (button >= 0) {
+        if (press) {
+            skippedPress[button] = IsOwnWindowAt(mouseStruct->pt);
+            if (skippedPress[button]) return;
+        } else if (skippedPress[button]) {
+            skippedPress[button] = false;
+            return;
+        }
     }
 
     std::lock_guard<std::mutex> lock(recordMutex);
@@ -265,6 +300,7 @@ void FlowEngine::StartRecording() {
     if (!InstallHooks()) return;
 
     ClearRecording();
+    std::fill(std::begin(skippedPress), std::end(skippedPress), false);
     recordingStartTime = GetTickCount();
     isRecording.store(true);
 }
