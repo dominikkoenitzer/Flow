@@ -55,6 +55,7 @@ FLOW needs **Administrator privileges** for its global low-level input hooks. La
 | `src/Settings.cpp` / `include/Settings.h` | `%APPDATA%\FLOW\settings.cfg` load/save. |
 | `src/Hotkeys.cpp` / `include/Hotkeys.h` | The four global hotkeys and key-name formatting. |
 | `include/ui/Theme.h` | The design system: palette, layout grid, DPI scaling. |
+| `src/ui/Dpi.cpp` / `include/ui/Dpi.h` | Per-monitor DPI lookups and frame sizes, so each window follows its monitor's scale. |
 | `src/ui/Draw.cpp` / `include/ui/Draw.h` | Anti-aliased GDI+ primitives and the vector glyphs. |
 | `src/ui/Buttons.cpp` / `include/ui/Buttons.h` | The owner-draw buttons, toggles and key fields. |
 | `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
@@ -84,7 +85,7 @@ GUI, which still need manual verification.
 - **C++17**, 4-space indentation, no tabs. There is an [`.editorconfig`](.editorconfig); please respect it.
 - The build must be **warning-clean**: CI compiles with `-Wall -Wextra -Werror`. Don't introduce warnings.
 - Engine code lives in `namespace flow` and must stay **UI-agnostic** (no window/HWND knowledge).
-- **DPI:** every pixel literal in layout/geometry must be wrapped in `Sc(int)` / `Scf(float)`. An unwrapped coordinate is correct at 100% but misplaced at higher DPI.
+- **DPI:** every pixel literal in layout/geometry must be wrapped in `Sc(int)` / `Scf(float)`. An unwrapped coordinate is correct at 100% but misplaced at higher DPI. Set a control's position and size only in `LayoutControls` (main window) or the dialog's `Layout...Dialog` function: those run again when the window moves to a monitor with another scale, and anything placed elsewhere stays at the old one.
 - **GUI layout is manual.** `PaintUI` (painted text/dividers) and `CreateControls` (child widgets) read the **same** `constexpr` Y constants. If you move a control, move its label and divider too. Nothing here is auto-laid-out.
 - **MinGW `swprintf`:** use `%ls` for `wchar_t*` args (plain `%s` is treated as narrow and silently truncates).
 - The binary **macro format** (`.rec`) is versioned and written field by field; the layout is documented in `include/FlowEngine.h`. A new field means a new `MACRO_FORMAT_VERSION`, and `LoadMacro` must keep reading every older version.

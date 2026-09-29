@@ -108,6 +108,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, coding co
 | `src/Settings.cpp` / `include/Settings.h` | `%APPDATA%\FLOW\settings.cfg` load/save. |
 | `src/Hotkeys.cpp` / `include/Hotkeys.h` | The four global hotkeys and key-name formatting. |
 | `include/ui/Theme.h` | The design system: palette, layout grid, DPI scaling. One source for both painting and control placement. |
+| `src/ui/Dpi.cpp` / `include/ui/Dpi.h` | Per-monitor DPI lookups and frame sizes, so each window follows its monitor's scale. |
 | `src/ui/Draw.cpp` / `include/ui/Draw.h` | Anti-aliased GDI+ primitives and the vector glyphs. |
 | `src/ui/Buttons.cpp` / `include/ui/Buttons.h` | The owner-draw buttons, toggles and key fields. |
 | `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
