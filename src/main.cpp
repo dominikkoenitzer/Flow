@@ -420,6 +420,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
 
+        case WM_GETDPISCALEDSIZE: {
+            // Windows would scale the whole frame linearly, but the caption and
+            // borders do not scale that way. Report the exact frame around our
+            // client area at the new DPI, so the rectangle WM_DPICHANGED
+            // suggests fits the layout to the pixel.
+            UINT dpi = (UINT)wParam;
+            SIZE* size = (SIZE*)lParam;
+            *size = WindowSizeForClient(ScAt(CLIENT_W, dpi), ScAt(CLIENT_H, dpi),
+                                        (DWORD)GetWindowLongPtrW(hwnd, GWL_STYLE),
+                                        (DWORD)GetWindowLongPtrW(hwnd, GWL_EXSTYLE), dpi);
+            return TRUE;
+        }
+
         case WM_ERASEBKGND:
             return 1;  // background painted in WM_PAINT
 
