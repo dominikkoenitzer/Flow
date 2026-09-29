@@ -5,17 +5,8 @@
 
 #include "FlowEngine.h"
 #include <fstream>
+#include <filesystem>
 #include <algorithm>
-
-// Helper: convert wide (UTF-16) string to UTF-8 narrow string for fstream on MinGW
-static std::string WStringToUtf8(const std::wstring& w) {
-    if (w.empty()) return std::string();
-    int size_needed = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    if (size_needed <= 0) return std::string();
-    std::string result(static_cast<size_t>(size_needed - 1), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, &result[0], size_needed, nullptr, nullptr);
-    return result;
-}
 
 namespace flow {
 
@@ -510,8 +501,9 @@ void FlowEngine::PlaybackThreadFunction() {
 // ---- persistence ----
 
 bool FlowEngine::SaveMacro(const std::wstring& filename) {
-    std::string path = WStringToUtf8(filename);
-    std::ofstream file(path, std::ios::binary);
+    // Open by the wide path. A narrow path is read in the ANSI code page, so a
+    // name outside it would be garbled and the file saved under the wrong name.
+    std::ofstream file(std::filesystem::path(filename), std::ios::binary);
     if (!file.is_open()) return false;
 
     // Write header
@@ -532,8 +524,7 @@ bool FlowEngine::SaveMacro(const std::wstring& filename) {
 }
 
 bool FlowEngine::LoadMacro(const std::wstring& filename) {
-    std::string path = WStringToUtf8(filename);
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream file(std::filesystem::path(filename), std::ios::binary);
     if (!file.is_open()) return false;
 
     // Measure the file so we can sanity-check the declared event count.
