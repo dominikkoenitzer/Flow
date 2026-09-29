@@ -337,6 +337,22 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
 #define IDC_ABOUT_OK   9100
 #define IDC_ABOUT_SUB  9101
 #define IDC_ABOUT_BODY 9102
+#define IDC_ABOUT_TITLE 9103
+
+// About dialog layout, in design units (scaled via Sc).
+static const int ABOUT_W = 440, ABOUT_H = 372, ABOUT_PAD = 28;
+
+// Place every control in the About dialog at the current g_scale and fonts.
+static void LayoutAboutDialog(HWND hDlg) {
+    const int textW = ABOUT_W - 2 * ABOUT_PAD;
+    const DlgPlace places[] = {
+        { IDC_ABOUT_TITLE, ABOUT_PAD, 22,  textW, 34,  g_fonts.wordmark },
+        { IDC_ABOUT_SUB,   ABOUT_PAD, 64,  textW, 22,  g_fonts.small_ },
+        { IDC_ABOUT_BODY,  ABOUT_PAD, 100, textW, 180, g_fonts.body },
+        { IDC_ABOUT_OK, ABOUT_W - ABOUT_PAD - 120, 300, 120, 44, nullptr },
+    };
+    PlaceControls(hDlg, places, sizeof(places) / sizeof(places[0]));
+}
 
 LRESULT CALLBACK AboutDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -391,18 +407,14 @@ void ShowAboutDialog(HWND hwnd) {
     HINSTANCE hi = GetModuleHandle(NULL);
     PatchDialogClassBrush(hDlg);
 
-    const int W = 440, H = 372, padX = 28;
+    CreateWindowExW(0, L"STATIC", L"Flow", WS_CHILD | WS_VISIBLE | SS_LEFT,
+        0, 0, 0, 0, hDlg, (HMENU)IDC_ABOUT_TITLE, hi, NULL);
 
-    HWND title = CreateWindowExW(0, L"STATIC", L"Flow", WS_CHILD | WS_VISIBLE | SS_LEFT,
-        Sc(padX), Sc(22), Sc(W - 2 * padX), Sc(34), hDlg, NULL, hi, NULL);
-    SendMessageW(title, WM_SETFONT, (WPARAM)g_fonts.wordmark, TRUE);
-
-    HWND sub = CreateWindowExW(0, L"STATIC", L"Flexible Low-latency Operations Workflow",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(64), Sc(W - 2 * padX), Sc(22),
+    CreateWindowExW(0, L"STATIC", L"Flexible Low-latency Operations Workflow",
+        WS_CHILD | WS_VISIBLE | SS_LEFT, 0, 0, 0, 0,
         hDlg, (HMENU)IDC_ABOUT_SUB, hi, NULL);
-    SendMessageW(sub, WM_SETFONT, (WPARAM)g_fonts.small_, TRUE);
 
-    HWND body = CreateWindowExW(0, L"STATIC",
+    CreateWindowExW(0, L"STATIC",
         L"A macro recorder, player, and high-speed auto-clicker.\r\n\r\n"
         L"Default hotkeys\r\n"
         L"F8:  Start / stop recording\r\n"
@@ -410,21 +422,21 @@ void ShowAboutDialog(HWND hwnd) {
         L"F6:  Toggle auto-clicker\r\n"
         L"Pause:  Stop everything\r\n\r\n"
         L"Settings are saved between sessions.",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(100), Sc(W - 2 * padX), Sc(180),
+        WS_CHILD | WS_VISIBLE | SS_LEFT, 0, 0, 0, 0,
         hDlg, (HMENU)IDC_ABOUT_BODY, hi, NULL);
-    SendMessageW(body, WM_SETFONT, (WPARAM)g_fonts.body, TRUE);
 
-    HWND ok = CreateWindowExW(0, L"BUTTON", L"",
+    CreateWindowExW(0, L"BUTTON", L"",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW | BS_DEFPUSHBUTTON,
-        Sc(W - padX - 120), Sc(300), Sc(120), Sc(44), hDlg, (HMENU)IDC_ABOUT_OK, hi, NULL);
-    (void)ok;
+        0, 0, 0, 0, hDlg, (HMENU)IDC_ABOUT_OK, hi, NULL);
 
-    SetWindowPos(hDlg, NULL, 0, 0, Sc(W), Sc(H), SWP_NOMOVE | SWP_NOZORDER);
+    LayoutAboutDialog(hDlg);
+
+    SetWindowPos(hDlg, NULL, 0, 0, Sc(ABOUT_W), Sc(ABOUT_H), SWP_NOMOVE | SWP_NOZORDER);
     RECT rcC; GetClientRect(hDlg, &rcC);
     RECT rcW; GetWindowRect(hDlg, &rcW);
     SetWindowPos(hDlg, NULL, 0, 0,
-        (rcW.right - rcW.left) + (Sc(W) - rcC.right),
-        (rcW.bottom - rcW.top) + (Sc(H) - rcC.bottom),
+        (rcW.right - rcW.left) + (Sc(ABOUT_W) - rcC.right),
+        (rcW.bottom - rcW.top) + (Sc(ABOUT_H) - rcC.bottom),
         SWP_NOMOVE | SWP_NOZORDER);
 
     GetWindowRect(hDlg, &rcW);
