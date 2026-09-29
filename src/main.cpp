@@ -566,42 +566,76 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 // ---- control creation ----
 
+// Place every child control at the current g_scale and give the edits the
+// current mono font. The only place a control's position or size is set, so
+// creation and a DPI change lay the window out the same way.
+void LayoutControls(HWND hwnd) {
+    const int cx = Sc(CONTENT_X);
+    const int contentW = Sc(CONTENT_W);
+    const int footY = Sc(FOOT_Y);
+    const int stopW = Sc(92), stopX = Sc(CRIGHT) - stopW;
+    const int setW = Sc(84), setX = stopX - Sc(8) - setW;
+
+    struct Place { int id, x, y, w, h; };
+    const Place places[] = {
+        // Section action buttons
+        { BTN_RECORD,         cx, Sc(REC_BTN_Y),  contentW, Sc(HERO_H) },
+        { BTN_PLAY,           cx, Sc(PLAY_BTN_Y), contentW, Sc(HERO_H) },
+        { BTN_TOGGLE_CLICKER, cx, Sc(CLK_BTN_Y),  contentW, Sc(SEC_BTN_H) },
+        // Inline numeric edits, right edge at CTRL_RIGHT
+        { EDIT_SPEED,    Sc(CTRL_RIGHT - EDIT_W), Sc(ROW_SPEED_Y - 4),    Sc(EDIT_W), Sc(30) },
+        { EDIT_LOOPS,    Sc(CTRL_RIGHT - EDIT_W), Sc(ROW_LOOPS_Y - 4),    Sc(EDIT_W), Sc(30) },
+        { EDIT_INTERVAL, Sc(CTRL_RIGHT - 70),     Sc(ROW_INTERVAL_Y - 4), Sc(70),     Sc(30) },
+        // Toggle switches, aligned with the edits
+        { CHK_CONTINUOUS, cx, Sc(ROW_CONT_Y - 4), Sc(CTRL_W), Sc(30) },
+        { CHK_HUMANIZE,   cx, Sc(ROW_HUM_Y - 4),  Sc(CTRL_W), Sc(30) },
+        // Footer: Open+Save grouped left, Settings+Stop All grouped right
+        { BTN_OPEN,     cx,           footY, Sc(80), Sc(FOOT_H) },
+        { BTN_SAVE,     cx + Sc(88),  footY, Sc(80), Sc(FOOT_H) },
+        { BTN_SETTINGS, setX,         footY, setW,   Sc(FOOT_H) },
+        { BTN_STOP_ALL, stopX,        footY, stopW,  Sc(FOOT_H) },
+    };
+    for (const Place& p : places) {
+        HWND c = GetDlgItem(hwnd, p.id);
+        if (c) SetWindowPos(c, NULL, p.x, p.y, p.w, p.h, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    const int edits[] = { EDIT_SPEED, EDIT_LOOPS, EDIT_INTERVAL };
+    for (int id : edits)
+        SendDlgItemMessageW(hwnd, id, WM_SETFONT, (WPARAM)g_fonts.mono, TRUE);
+}
+
 void CreateControls(HWND hwnd) {
     HINSTANCE hi = GetModuleHandle(NULL);
-    int cx = Sc(CONTENT_X);
-    int contentW = Sc(CONTENT_W);
 
     // Section action buttons (visual weight resolved per-state in DrawFlowButton)
-    CreateFlowButton(hwnd, BTN_RECORD, cx, Sc(REC_BTN_Y), contentW, Sc(HERO_H), L"Start / stop recording");
-    CreateFlowButton(hwnd, BTN_PLAY, cx, Sc(PLAY_BTN_Y), contentW, Sc(HERO_H), L"Play the recorded macro");
-    CreateFlowButton(hwnd, BTN_TOGGLE_CLICKER, cx, Sc(CLK_BTN_Y), contentW, Sc(SEC_BTN_H), L"Start / stop the auto-clicker");
+    CreateFlowButton(hwnd, BTN_RECORD, 0, 0, 0, 0, L"Start / stop recording");
+    CreateFlowButton(hwnd, BTN_PLAY, 0, 0, 0, 0, L"Play the recorded macro");
+    CreateFlowButton(hwnd, BTN_TOGGLE_CLICKER, 0, 0, 0, 0, L"Start / stop the auto-clicker");
 
-    // Inline numeric edits: borderless, monospace, right-aligned, right edge at CTRL_RIGHT.
+    // Inline numeric edits: borderless, monospace, right-aligned.
     // Pill + hover/focus affordance is painted in PaintUI; hover tracked via InputEditProc.
-    auto makeEdit = [&](int id, int x, int y, int w, DWORD extra) -> HWND {
+    auto makeEdit = [&](int id, DWORD extra) {
         HWND e = CreateWindowExW(0, L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | ES_RIGHT | extra,
-            x, y, w, Sc(30), hwnd, (HMENU)(LONG_PTR)id, hi, NULL);
-        SendMessageW(e, WM_SETFONT, (WPARAM)g_fonts.mono, TRUE);
+            0, 0, 0, 0, hwnd, (HMENU)(LONG_PTR)id, hi, NULL);
         SetWindowSubclass(e, InputEditProc, 0, 0);
-        return e;
     };
-    makeEdit(EDIT_SPEED,    Sc(CTRL_RIGHT - EDIT_W), Sc(ROW_SPEED_Y - 4),    Sc(EDIT_W), 0);
-    makeEdit(EDIT_LOOPS,    Sc(CTRL_RIGHT - EDIT_W), Sc(ROW_LOOPS_Y - 4),    Sc(EDIT_W), ES_NUMBER);
-    makeEdit(EDIT_INTERVAL, Sc(CTRL_RIGHT - 70),     Sc(ROW_INTERVAL_Y - 4), Sc(70),     ES_NUMBER);
+    makeEdit(EDIT_SPEED,    0);
+    makeEdit(EDIT_LOOPS,    ES_NUMBER);
+    makeEdit(EDIT_INTERVAL, ES_NUMBER);
 
-    // Toggle switches (owner-draw; label left + switch right, aligned with the edits)
-    CreateFlowButton(hwnd, CHK_CONTINUOUS, cx, Sc(ROW_CONT_Y - 4), Sc(CTRL_W), Sc(30), L"Repeat playback until stopped");
-    CreateFlowButton(hwnd, CHK_HUMANIZE,   cx, Sc(ROW_HUM_Y - 4),  Sc(CTRL_W), Sc(30), L"Add small random timing variance");
+    // Toggle switches (owner-draw; label left + switch right)
+    CreateFlowButton(hwnd, CHK_CONTINUOUS, 0, 0, 0, 0, L"Repeat playback until stopped");
+    CreateFlowButton(hwnd, CHK_HUMANIZE,   0, 0, 0, 0, L"Add small random timing variance");
 
-    // Footer: Open+Save grouped left, big gap, Settings+Stop All grouped right
-    int footY = Sc(FOOT_Y);
-    CreateFlowButton(hwnd, BTN_OPEN, cx, footY, Sc(80), Sc(FOOT_H), L"Open a saved macro (.rec)");
-    CreateFlowButton(hwnd, BTN_SAVE, cx + Sc(88), footY, Sc(80), Sc(FOOT_H), L"Save the current macro");
-    int stopW = Sc(92), stopX = Sc(CRIGHT) - stopW;
-    int setW = Sc(84), setX = stopX - Sc(8) - setW;
-    CreateFlowButton(hwnd, BTN_SETTINGS, setX, footY, setW, Sc(FOOT_H), L"Hotkeys, always-on-top, about");
-    CreateFlowButton(hwnd, BTN_STOP_ALL, stopX, footY, stopW, Sc(FOOT_H), L"Stop everything");
+    // Footer
+    CreateFlowButton(hwnd, BTN_OPEN, 0, 0, 0, 0, L"Open a saved macro (.rec)");
+    CreateFlowButton(hwnd, BTN_SAVE, 0, 0, 0, 0, L"Save the current macro");
+    CreateFlowButton(hwnd, BTN_SETTINGS, 0, 0, 0, 0, L"Hotkeys, always-on-top, about");
+    CreateFlowButton(hwnd, BTN_STOP_ALL, 0, 0, 0, 0, L"Stop everything");
+
+    LayoutControls(hwnd);
 
     // Initialize edit values from state
     wchar_t buf[32];
