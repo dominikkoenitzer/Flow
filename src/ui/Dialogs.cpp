@@ -7,6 +7,7 @@
 #include "AppState.h"
 #include "Hotkeys.h"
 #include "ui/Buttons.h"
+#include "ui/Dpi.h"
 #include "ui/Draw.h"
 #include "ui/Theme.h"
 
@@ -34,6 +35,83 @@ namespace flow::ui {
 #define IDC_HK_LABEL_PLAYBACK 9005
 #define IDC_HK_LABEL_CLICKER 9006
 #define IDC_HK_LABEL_STOP 9007
+
+// A dialog's own DPI and fonts, for the monitor the dialog is on, which need
+// not be the main window's.
+struct DialogScale {
+    UINT dpi = 96;
+    UiFonts fonts;
+};
+
+static DialogScale s_hotkeyScale;
+static DialogScale s_aboutScale;
+
+// Stands a dialog's scale and fonts in for g_scale and g_fonts while it lives,
+// so Sc() and the shared painters size for the dialog's monitor. Never hold one
+// across anything that pumps messages, or the main window would paint at the
+// dialog's scale.
+class ScaleScope {
+public:
+    explicit ScaleScope(const DialogScale& s) : scale_(g_scale), fonts_(g_fonts) {
+        SetScaleFromDpi(s.dpi);
+        g_fonts = s.fonts;
+    }
+    ~ScaleScope() {
+        g_scale = scale_;
+        g_fonts = fonts_;
+    }
+    ScaleScope(const ScaleScope&) = delete;
+    ScaleScope& operator=(const ScaleScope&) = delete;
+
+private:
+    double scale_;
+    UiFonts fonts_;
+};
+
+// Build a dialog's fonts for `dpi` and lay it out with them; the controls get
+// the new fonts before the old ones are deleted.
+static void ScaleDialog(HWND hDlg, DialogScale& s, UINT dpi, void (*layout)(HWND)) {
+    UiFonts old = s.fonts;
+    s.dpi = dpi;
+    {
+        ScaleScope scope(s);
+        CreateUiFonts(s.fonts);
+    }
+    {
+        ScaleScope scope(s);
+        layout(hDlg);
+    }
+    DeleteUiFonts(old);
+}
+
+// Outer size of a dialog whose client area is w x h design units at `dpi`.
+static SIZE DialogFrame(HWND hDlg, int w, int h, UINT dpi) {
+    return WindowSizeForClient(ScAt(w, dpi), ScAt(h, dpi),
+                               (DWORD)GetWindowLongPtrW(hDlg, GWL_STYLE),
+                               (DWORD)GetWindowLongPtrW(hDlg, GWL_EXSTYLE), dpi);
+}
+
+// Where a dialog opens: centred on its parent, sized for the monitor it lands
+// on. Plans at the parent's DPI, then again at the DPI of the monitor under
+// that rectangle when it differs. Returns the rectangle and sets `dpi`.
+static RECT PlanDialog(HWND hDlg, HWND parent, int w, int h, UINT& dpi) {
+    RECT rp;
+    GetWindowRect(parent, &rp);
+    auto centred = [&](UINT d) {
+        SIZE s = DialogFrame(hDlg, w, h, d);
+        int x = rp.left + (rp.right - rp.left - s.cx) / 2;
+        int y = rp.top + (rp.bottom - rp.top - s.cy) / 2;
+        return RECT{ x, y, x + s.cx, y + s.cy };
+    };
+    dpi = DpiForWindow(parent);
+    RECT r = centred(dpi);
+    UINT monitorDpi = DpiForRect(r);
+    if (monitorDpi != dpi) {
+        dpi = monitorDpi;
+        r = centred(dpi);
+    }
+    return r;
+}
 
 // Places a control at design units through Sc(), and optionally sets its font.
 struct DlgPlace { int id, x, y, w, h; HFONT font; };
@@ -114,6 +192,7 @@ LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM 
         }
 
         case WM_DRAWITEM: {
+            ScaleScope scope(s_hotkeyScale);   // paint at the dialog's own DPI
             DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
             if (dis->CtlID == IDC_HOTKEY_OK)     { DrawDlgButton(dis, L"Save Changes", true); return TRUE; }
             if (dis->CtlID == IDC_HOTKEY_CANCEL) { DrawDlgButton(dis, L"Cancel", false);       return TRUE; }
@@ -297,23 +376,11 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
         0, 0, 0, 0, hDlg, (HMENU)IDC_HOTKEY_CANCEL, hi, NULL);
 
-    LayoutHotkeyDialog(hDlg);
-
-    // Size the client area to exactly Sc(HK_W) x Sc(HK_H)
-    SetWindowPos(hDlg, NULL, 0, 0, Sc(HK_W), Sc(HK_H), SWP_NOMOVE | SWP_NOZORDER);
-    RECT rcC; GetClientRect(hDlg, &rcC);
-    RECT rcW; GetWindowRect(hDlg, &rcW);
-    SetWindowPos(hDlg, NULL, 0, 0,
-        (rcW.right - rcW.left) + (Sc(HK_W) - rcC.right),
-        (rcW.bottom - rcW.top) + (Sc(HK_H) - rcC.bottom),
-        SWP_NOMOVE | SWP_NOZORDER);
-
-    // Center on parent
-    GetWindowRect(hDlg, &rcW);
-    RECT rcParent; GetWindowRect(hwnd, &rcParent);
-    int x = rcParent.left + (rcParent.right - rcParent.left - (rcW.right - rcW.left)) / 2;
-    int y = rcParent.top + (rcParent.bottom - rcParent.top - (rcW.bottom - rcW.top)) / 2;
-    SetWindowPos(hDlg, HWND_TOP, x, y, 0, 0, SWP_NOSIZE);
+    // Centre on the parent, laid out for the monitor the dialog lands on.
+    UINT dpi = 96;
+    RECT at = PlanDialog(hDlg, hwnd, HK_W, HK_H, dpi);
+    ScaleDialog(hDlg, s_hotkeyScale, dpi, LayoutHotkeyDialog);
+    SetWindowPos(hDlg, HWND_TOP, at.left, at.top, at.right - at.left, at.bottom - at.top, 0);
 
     ShowWindow(hDlg, SW_SHOW);
     SetFocus(g_hHotkeyRecordEdit);
@@ -328,6 +395,7 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     }
     EnableWindow(hwnd, TRUE);
     SetFocus(hwnd);
+    DeleteUiFonts(s_hotkeyScale.fonts);   // the dialog and its controls are gone
 }
 
 // ---------------------------------------------------------------------------
@@ -366,6 +434,7 @@ LRESULT CALLBACK AboutDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM l
             return (INT_PTR)bgB;
         }
         case WM_DRAWITEM: {
+            ScaleScope scope(s_aboutScale);   // paint at the dialog's own DPI
             DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
             if (dis->CtlID == IDC_ABOUT_OK) { DrawDlgButton(dis, L"Got it", true); return TRUE; }
             break;
@@ -429,21 +498,11 @@ void ShowAboutDialog(HWND hwnd) {
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW | BS_DEFPUSHBUTTON,
         0, 0, 0, 0, hDlg, (HMENU)IDC_ABOUT_OK, hi, NULL);
 
-    LayoutAboutDialog(hDlg);
-
-    SetWindowPos(hDlg, NULL, 0, 0, Sc(ABOUT_W), Sc(ABOUT_H), SWP_NOMOVE | SWP_NOZORDER);
-    RECT rcC; GetClientRect(hDlg, &rcC);
-    RECT rcW; GetWindowRect(hDlg, &rcW);
-    SetWindowPos(hDlg, NULL, 0, 0,
-        (rcW.right - rcW.left) + (Sc(ABOUT_W) - rcC.right),
-        (rcW.bottom - rcW.top) + (Sc(ABOUT_H) - rcC.bottom),
-        SWP_NOMOVE | SWP_NOZORDER);
-
-    GetWindowRect(hDlg, &rcW);
-    RECT rcParent; GetWindowRect(hwnd, &rcParent);
-    int x = rcParent.left + (rcParent.right - rcParent.left - (rcW.right - rcW.left)) / 2;
-    int y = rcParent.top + (rcParent.bottom - rcParent.top - (rcW.bottom - rcW.top)) / 2;
-    SetWindowPos(hDlg, HWND_TOP, x, y, 0, 0, SWP_NOSIZE);
+    // Centre on the parent, laid out for the monitor the dialog lands on.
+    UINT dpi = 96;
+    RECT at = PlanDialog(hDlg, hwnd, ABOUT_W, ABOUT_H, dpi);
+    ScaleDialog(hDlg, s_aboutScale, dpi, LayoutAboutDialog);
+    SetWindowPos(hDlg, HWND_TOP, at.left, at.top, at.right - at.left, at.bottom - at.top, 0);
 
     ShowWindow(hDlg, SW_SHOW);
 
@@ -457,6 +516,7 @@ void ShowAboutDialog(HWND hwnd) {
     }
     EnableWindow(hwnd, TRUE);
     SetFocus(hwnd);
+    DeleteUiFonts(s_aboutScale.fonts);   // the dialog and its controls are gone
 }
 
 }  // namespace flow::ui
