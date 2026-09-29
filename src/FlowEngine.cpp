@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <algorithm>
 #include <cstring>
-#include <iterator>
 
 namespace flow {
 
@@ -776,11 +775,21 @@ bool FlowEngine::LoadMacro(const std::wstring& filename) {
     std::ifstream file(std::filesystem::path(filename), std::ios::binary);
     if (!file.is_open()) return false;
 
-    // Read the whole file: the largest real macro is a few megabytes, and the
-    // size bounds every count check below.
-    const std::string bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    const char* in = bytes.data();
-    size_t left = bytes.size();
+    // Measure the file so the declared event count can be checked against it
+    // before anything is allocated. A dropped file may be anything, and large.
+    file.seekg(0, std::ios::end);
+    const std::streamoff fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
+    if (fileSize < 0) return false;
+
+    // The longest header there is: magic, marker, version, count.
+    char head[4 + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint64_t)];
+    const size_t headRead = static_cast<size_t>(
+        std::min<std::streamoff>(fileSize, static_cast<std::streamoff>(sizeof(head))));
+    file.read(head, static_cast<std::streamsize>(headRead));
+    if (!file) return false;
+    const char* in = head;
+    size_t left = headRead;
 
     if (left < 4 + sizeof(uint64_t) || std::memcmp(in, "FLOW", 4) != 0) return false;
     in += 4;
@@ -796,15 +805,23 @@ bool FlowEngine::LoadMacro(const std::wstring& filename) {
         // cannot replay; an older explicit one was never written.
         if (version != MACRO_FORMAT_VERSION) return false;
         count = get<uint64_t>(in);
-        left -= sizeof(uint32_t) + sizeof(uint64_t);
     }
 
     // Reject a count that can't fit in the remaining bytes. Without this, a
     // corrupt/truncated/hostile .rec file (e.g. a partial download) could carry
     // a garbage count and make reserve() attempt a huge allocation -> bad_alloc
     // -> crash. This bounds the count to what the payload can actually contain.
+    const std::streamoff headerSize = in - head;
     const size_t recordSize = version == 1 ? MACRO_EVENT_SIZE_V1 : MACRO_EVENT_SIZE_V2;
-    if (count > left / recordSize) return false;
+    const uint64_t payload = static_cast<uint64_t>(fileSize - headerSize);
+    if (count > payload / recordSize) return false;
+
+    std::string bytes(static_cast<size_t>(count) * recordSize, '\0');
+    file.clear();
+    file.seekg(headerSize, std::ios::beg);
+    file.read(&bytes[0], static_cast<std::streamsize>(bytes.size()));
+    if (!file) return false;
+    in = bytes.data();
 
     // Decode into a scratch buffer, so a file that fails part way through
     // leaves the macro already loaded as it was, not half replaced.
