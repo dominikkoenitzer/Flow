@@ -43,12 +43,16 @@ struct ScratchFile {
 };
 
 /** Feed one mouse event through the hook entry point. */
-void pushMouse(FlowEngine& engine, WPARAM message, LONG x, LONG y) {
+void pushMouse(FlowEngine& engine, WPARAM message, LONG x, LONG y, DWORD mouseData = 0) {
     MSLLHOOKSTRUCT hook = {};
     hook.pt.x = x;
     hook.pt.y = y;
+    hook.mouseData = mouseData;
     engine.OnMouseEvent(message, &hook);
 }
+
+/** The hook's mouseData for a wheel delta or side button: the high word. */
+DWORD highWord(int value) { return static_cast<DWORD>(static_cast<WORD>(value)) << 16; }
 
 /** Feed one keyboard event through the hook entry point. */
 void pushKey(FlowEngine& engine, WPARAM message, DWORD vk) {
@@ -169,10 +173,98 @@ TEST_CASE("Timestamps count from the start of the recording") {
 
 TEST_CASE("Unrecognised window messages are ignored") {
     FlowEngine engine;
-    pushMouse(engine, WM_MOUSEWHEEL, 10, 10);  // the wheel is not a captured type
-    pushKey(engine, WM_CHAR, 'A');             // not a key up or down
+    pushKey(engine, WM_CHAR, 'A');                           // not a key up or down
+    pushMouse(engine, WM_LBUTTONDBLCLK, 10, 10);             // hooks never send these
+    pushMouse(engine, WM_XBUTTONDOWN, 10, 10, highWord(3));  // no such side button
 
     CHECK(engine.GetEventCount() == 0);
+}
+
+TEST_CASE("The wheel is captured with its signed delta") {
+    FlowEngine engine;
+    pushMouse(engine, WM_MOUSEWHEEL, -300, 400, highWord(WHEEL_DELTA));     // one notch away
+    pushMouse(engine, WM_MOUSEWHEEL, -300, 400, highWord(-2 * WHEEL_DELTA)); // two towards
+    pushMouse(engine, WM_MOUSEWHEEL, -300, 400, highWord(30));              // a high-resolution step
+    pushMouse(engine, WM_MOUSEHWHEEL, -300, 400, highWord(WHEEL_DELTA));    // tilt right
+    pushMouse(engine, WM_MOUSEHWHEEL, -300, 400, highWord(-WHEEL_DELTA));   // tilt left
+
+    const auto events = engine.GetEvents();
+    REQUIRE(events.size() == 5);
+    CHECK(events[0].type == InputEvent::Type::MOUSE_WHEEL);
+    CHECK(events[0].mouseData == WHEEL_DELTA);
+    CHECK(events[1].type == InputEvent::Type::MOUSE_WHEEL);
+    CHECK(events[1].mouseData == -2 * WHEEL_DELTA);
+    CHECK(events[2].mouseData == 30);
+    CHECK(events[3].type == InputEvent::Type::MOUSE_HWHEEL);
+    CHECK(events[3].mouseData == WHEEL_DELTA);
+    CHECK(events[4].type == InputEvent::Type::MOUSE_HWHEEL);
+    CHECK(events[4].mouseData == -WHEEL_DELTA);
+    for (const auto& event : events) {
+        CHECK(event.screenCoords.x == -300);
+        CHECK(event.screenCoords.y == 400);
+    }
+}
+
+TEST_CASE("The side buttons are captured as their own presses and releases") {
+    FlowEngine engine;
+    pushMouse(engine, WM_XBUTTONDOWN, 5, 6, highWord(XBUTTON1));
+    pushMouse(engine, WM_XBUTTONUP, 5, 6, highWord(XBUTTON1));
+    pushMouse(engine, WM_XBUTTONDOWN, 5, 6, highWord(XBUTTON2));
+    pushMouse(engine, WM_XBUTTONUP, 5, 6, highWord(XBUTTON2));
+
+    const auto events = engine.GetEvents();
+    REQUIRE(events.size() == 4);
+    CHECK(events[0].type == InputEvent::Type::MOUSE_X1_DOWN);
+    CHECK(events[1].type == InputEvent::Type::MOUSE_X1_UP);
+    CHECK(events[2].type == InputEvent::Type::MOUSE_X2_DOWN);
+    CHECK(events[3].type == InputEvent::Type::MOUSE_X2_UP);
+    for (const auto& event : events) {
+        CHECK(event.mouseData == 0);  // the button is in the type, not the data
+    }
+}
+
+TEST_CASE("Wheel and side-button events survive a save and load") {
+    ScratchFile file(L"wheel_roundtrip");
+    FlowEngine saver;
+    pushMouse(saver, WM_MOUSEWHEEL, 1, 2, highWord(-WHEEL_DELTA));
+    pushMouse(saver, WM_MOUSEHWHEEL, 1, 2, highWord(45));
+    pushMouse(saver, WM_XBUTTONDOWN, 1, 2, highWord(XBUTTON2));
+    pushMouse(saver, WM_XBUTTONUP, 1, 2, highWord(XBUTTON2));
+    REQUIRE(saver.SaveMacro(file.path));
+
+    FlowEngine loader;
+    REQUIRE(loader.LoadMacro(file.path));
+    const auto events = loader.GetEvents();
+    REQUIRE(events.size() == 4);
+    CHECK(events[0].type == InputEvent::Type::MOUSE_WHEEL);
+    CHECK(events[0].mouseData == -WHEEL_DELTA);
+    CHECK(events[1].type == InputEvent::Type::MOUSE_HWHEEL);
+    CHECK(events[1].mouseData == 45);
+    CHECK(events[2].type == InputEvent::Type::MOUSE_X2_DOWN);
+    CHECK(events[3].type == InputEvent::Type::MOUSE_X2_UP);
+}
+
+TEST_CASE("An unversioned file cannot hold a wheel event") {
+    // Version 1 builds had no wheel type, so a type number past KEY_UP in an
+    // old file is corruption, not a wheel.
+    ScratchFile file(L"legacy_wheel");
+    auto bytes = header(1);
+    appendV1Event(bytes, static_cast<uint32_t>(InputEvent::Type::MOUSE_WHEEL), 0, 0, 0, 0, 0, 0);
+    writeBytes(file.path, bytes);
+
+    FlowEngine engine;
+    CHECK_FALSE(engine.LoadMacro(file.path));
+}
+
+TEST_CASE("A version 2 file with a type past the last known one is rejected") {
+    ScratchFile file(L"v2_bad_type");
+    auto bytes = headerV2(flow::MACRO_FORMAT_VERSION, 1);
+    appendV1Event(bytes, static_cast<uint32_t>(InputEvent::Type::MOUSE_X2_UP) + 1, 0, 0, 0, 0, 0, 0);
+    append<int32_t>(bytes, 0);
+    writeBytes(file.path, bytes);
+
+    FlowEngine engine;
+    CHECK_FALSE(engine.LoadMacro(file.path));
 }
 
 TEST_CASE("The control hotkeys are filtered out of a recording") {

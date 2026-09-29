@@ -63,7 +63,15 @@ struct InputEvent {
         MOUSE_MIDDLE_DOWN,   ///< Middle mouse button pressed
         MOUSE_MIDDLE_UP,     ///< Middle mouse button released
         KEY_DOWN,            ///< Keyboard key pressed
-        KEY_UP               ///< Keyboard key released
+        KEY_UP,              ///< Keyboard key released
+        // Format version 2 onwards. New types go at the end, so the values
+        // already stored in files keep their meaning.
+        MOUSE_WHEEL,         ///< Vertical wheel turned; mouseData is the delta
+        MOUSE_HWHEEL,        ///< Horizontal wheel tilted; mouseData is the delta
+        MOUSE_X1_DOWN,       ///< First side button (usually Back) pressed
+        MOUSE_X1_UP,         ///< First side button released
+        MOUSE_X2_DOWN,       ///< Second side button (usually Forward) pressed
+        MOUSE_X2_UP          ///< Second side button released
     };
 
     Type type;                  ///< Event type identifier
@@ -72,7 +80,7 @@ struct InputEvent {
     DWORD timestamp;            ///< Relative timestamp in milliseconds
     DWORD scanCode;             ///< Hardware scan code
     DWORD flags;                ///< Additional event flags
-    LONG mouseData;             ///< Wheel delta or X button number (for mouse events)
+    LONG mouseData;             ///< Wheel delta, in WHEEL_DELTA (120) steps per notch; 0 otherwise
 
     /** @brief Default constructor initializes all fields to safe defaults */
     InputEvent() : type(Type::MOUSE_MOVE), screenCoords{0, 0},
@@ -83,7 +91,7 @@ struct InputEvent {
 //
 // Every field is written at a fixed width, little-endian, one after another.
 //
-//   version 2 (current)                 version 1 (unversioned, before 2026-09)
+//   version 2 (current)                 version 1 (unversioned, older builds)
 //   "FLOW"                              "FLOW"
 //   u64 0xFFFFFFFFFFFFFFFF  marker      u64 event count
 //   u32 format version                  28-byte events: type, x, y, virtual key,
@@ -269,7 +277,7 @@ private:
     LONGLONG recordingStartTicks;            ///< Performance counter at the recording start
     LONGLONG counterFrequency;               ///< QueryPerformanceFrequency, fixed at boot
     std::atomic<DWORD> controlKeys[4];       ///< FLOW's own hotkeys, never recorded
-    bool skippedPress[3];                    ///< Left/right/middle press on FLOW left out, so its release is too
+    bool skippedPress[5];                    ///< Left/right/middle/X1/X2 press on FLOW left out, so its release is too
 
     // ===== Auto-Clicker System =====
     std::atomic<bool> isClicking;            ///< Clicker active flag
