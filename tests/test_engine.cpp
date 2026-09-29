@@ -150,3 +150,53 @@ TEST_CASE("A gap too long for a DWORD saturates instead of wrapping") {
     const LONGLONG freq = 1000;  // one tick per millisecond
     CHECK(flow::TicksToMs(0, static_cast<LONGLONG>(MAXDWORD) + 5, freq) == MAXDWORD);
 }
+
+TEST_CASE("A scaled gap keeps its fraction of a millisecond") {
+    CHECK(flow::ScaleGapUs(10, 1.0) == doctest::Approx(10000.0));
+    CHECK(flow::ScaleGapUs(10, 2.0) == doctest::Approx(5000.0));
+    CHECK(flow::ScaleGapUs(10, 0.5) == doctest::Approx(20000.0));
+
+    // 1 ms gaps at 1.5x used to truncate to 0 ms each, so a drag played as one
+    // jump. They now add up to the time they should take.
+    double total = 0.0;
+    for (int i = 0; i < 1000; ++i) total += flow::ScaleGapUs(1, 1.5);
+    CHECK(total == doctest::Approx(666666.7).epsilon(0.0001));
+}
+
+TEST_CASE("A scaled gap never divides by a zero or negative speed") {
+    CHECK(flow::ScaleGapUs(1, 0.0) == doctest::Approx(100000.0));   // the 0.01 floor
+    CHECK(flow::ScaleGapUs(1, -3.0) == doctest::Approx(100000.0));
+}
+
+TEST_CASE("NextVariance is the bias alone when the spread is zero") {
+    flow::HumanizationEngine humanizer(4.0, 0.0);
+    CHECK(humanizer.NextVariance() == doctest::Approx(4.0));
+    CHECK(humanizer.AddVariance(10) == 14);
+}
+
+TEST_CASE("WaitUntilMicroseconds keeps to one schedule") {
+    // Three waits against one clock: each target is measured from the timer's
+    // start, so the total is the last target, not the sum of the three.
+    HighResTimer timer;
+    timer.WaitUntilMicroseconds(4000);
+    CHECK(timer.GetElapsedMicroseconds() >= 4000);
+    timer.WaitUntilMicroseconds(8000);
+    CHECK(timer.GetElapsedMicroseconds() >= 8000);
+    timer.WaitUntilMicroseconds(12000);
+    CHECK(timer.GetElapsedMicroseconds() >= 12000);
+}
+
+TEST_CASE("WaitUntilMicroseconds returns at once for a target already passed") {
+    HighResTimer timer;
+    HighResTimer::PreciseDelayMs(5);
+    HighResTimer check;
+    timer.WaitUntilMicroseconds(1000);
+    CHECK(check.GetElapsedMicroseconds() < 50000);
+}
+
+TEST_CASE("WaitUntilMicroseconds stops waiting when cancelled") {
+    std::atomic<bool> cancel{true};
+    HighResTimer timer;
+    timer.WaitUntilMicroseconds(10 * 1000 * 1000, &cancel);  // ten seconds
+    CHECK(timer.GetElapsedMicroseconds() < 1000000);
+}
