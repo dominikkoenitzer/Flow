@@ -427,6 +427,12 @@ void FlowEngine::PlaybackThreadFunction() {
         eventsCopy = recordedEvents;
     }
 
+    // What this run has pressed and not yet released. A stop part way through
+    // the macro would otherwise leave those keys and buttons held down.
+    bool buttonHeld[3] = {};                 // left, right, middle
+    struct HeldKey { bool held; WORD scan; bool extended; };
+    HeldKey keyHeld[256] = {};
+
     while ((maxLoops == -1 || currentLoop < maxLoops) && !shouldStopPlayback.load()) {
         currentLoopIteration.store(currentLoop + 1);
         HighResTimer timer;
@@ -482,36 +488,42 @@ void FlowEngine::PlaybackThreadFunction() {
                     input.type = INPUT_MOUSE;
                     input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
                     SendInput(1, &input, sizeof(INPUT));
+                    buttonHeld[0] = true;
                     break;
 
                 case InputEvent::Type::MOUSE_LEFT_UP:
                     input.type = INPUT_MOUSE;
                     input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
                     SendInput(1, &input, sizeof(INPUT));
+                    buttonHeld[0] = false;
                     break;
 
                 case InputEvent::Type::MOUSE_RIGHT_DOWN:
                     input.type = INPUT_MOUSE;
                     input.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
                     SendInput(1, &input, sizeof(INPUT));
+                    buttonHeld[1] = true;
                     break;
 
                 case InputEvent::Type::MOUSE_RIGHT_UP:
                     input.type = INPUT_MOUSE;
                     input.mi.dwFlags = MOUSEEVENTF_RIGHTUP;
                     SendInput(1, &input, sizeof(INPUT));
+                    buttonHeld[1] = false;
                     break;
 
                 case InputEvent::Type::MOUSE_MIDDLE_DOWN:
                     input.type = INPUT_MOUSE;
                     input.mi.dwFlags = MOUSEEVENTF_MIDDLEDOWN;
                     SendInput(1, &input, sizeof(INPUT));
+                    buttonHeld[2] = true;
                     break;
 
                 case InputEvent::Type::MOUSE_MIDDLE_UP:
                     input.type = INPUT_MOUSE;
                     input.mi.dwFlags = MOUSEEVENTF_MIDDLEUP;
                     SendInput(1, &input, sizeof(INPUT));
+                    buttonHeld[2] = false;
                     break;
 
                 case InputEvent::Type::KEY_DOWN:
@@ -520,6 +532,10 @@ void FlowEngine::PlaybackThreadFunction() {
                     input.ki.wScan = static_cast<WORD>(event.scanCode);
                     input.ki.dwFlags = (event.flags & LLKHF_EXTENDED) ? KEYEVENTF_EXTENDEDKEY : 0;
                     SendInput(1, &input, sizeof(INPUT));
+                    if (event.virtualKeyCode < 256) {
+                        keyHeld[event.virtualKeyCode] = { true, input.ki.wScan,
+                                                          (event.flags & LLKHF_EXTENDED) != 0 };
+                    }
                     break;
 
                 case InputEvent::Type::KEY_UP:
@@ -531,11 +547,33 @@ void FlowEngine::PlaybackThreadFunction() {
                         input.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
                     }
                     SendInput(1, &input, sizeof(INPUT));
+                    if (event.virtualKeyCode < 256) {
+                        keyHeld[event.virtualKeyCode].held = false;
+                    }
                     break;
             }
         }
 
         currentLoop++;
+    }
+
+    // Release whatever is still held, in whatever way the run ended.
+    const DWORD buttonUp[3] = { MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEUP };
+    for (int b = 0; b < 3; ++b) {
+        if (!buttonHeld[b]) continue;
+        INPUT input = {};
+        input.type = INPUT_MOUSE;
+        input.mi.dwFlags = buttonUp[b];
+        SendInput(1, &input, sizeof(INPUT));
+    }
+    for (WORD vk = 0; vk < 256; ++vk) {
+        if (!keyHeld[vk].held) continue;
+        INPUT input = {};
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = vk;
+        input.ki.wScan = keyHeld[vk].scan;
+        input.ki.dwFlags = KEYEVENTF_KEYUP | (keyHeld[vk].extended ? KEYEVENTF_EXTENDEDKEY : 0);
+        SendInput(1, &input, sizeof(INPUT));
     }
 
     isPlaying.store(false);
