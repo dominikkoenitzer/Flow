@@ -246,6 +246,17 @@ public:
     void SetDistribution(double mean, double stddev);
 };
 
+/**
+ * @brief How long playback waits before an event
+ * @param gapUs Recorded gap to the previous event in microseconds
+ * @param speed Playback speed multiplier
+ * @param humanizer Jitter source, or nullptr when humanization is off
+ * @return The wait in microseconds. Jitter is added only to a wait of a
+ *         millisecond or more after scaling, and never shortens one below a
+ *         millisecond: events inside one millisecond are one gesture.
+ */
+double PlaybackGapUs(ULONGLONG gapUs, double speed, HumanizationEngine* humanizer);
+
 // ---- FlowEngine ----
 
 /**
