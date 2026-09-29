@@ -120,7 +120,27 @@ public:
      *       still keeping sub-millisecond accuracy for clicker/playback timing.
      */
     static void PreciseDelayMs(DWORD milliseconds, const std::atomic<bool>* cancel = nullptr);
+
+    /**
+     * @brief Wait until this timer reads at least the given elapsed time
+     * @param targetMicroseconds Point on this timer's clock to wait for
+     * @param cancel Optional flag; the wait returns early once it is set
+     * @note Measured against the timer's start, not the moment of the call, so
+     *       a sequence of waits keeps to one schedule: time spent between waits
+     *       is absorbed instead of adding up. A target already passed returns
+     *       at once.
+     */
+    void WaitUntilMicroseconds(LONGLONG targetMicroseconds, const std::atomic<bool>* cancel = nullptr);
 };
+
+/**
+ * @brief A recorded gap in microseconds at a playback speed
+ * @param gapMs Recorded gap in milliseconds
+ * @param speed Playback speed multiplier; clamped to the engine's 0.01 floor
+ * @return The gap to wait, kept fractional so short gaps are not truncated to
+ *         zero when the speed does not divide them evenly
+ */
+double ScaleGapUs(DWORD gapMs, double speed);
 
 /**
  * @brief Whole milliseconds between two QueryPerformanceCounter readings
@@ -171,6 +191,12 @@ public:
      *       requires a positive stddev, so it is not constructed in that case.
      */
     DWORD AddVariance(DWORD baseDelay);
+
+    /**
+     * @brief One draw of the configured variance, in milliseconds
+     * @return A Gaussian sample, or the bias alone when the spread is not positive
+     */
+    double NextVariance();
 
     /**
      * @brief Reconfigure the Gaussian distribution parameters

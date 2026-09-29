@@ -73,6 +73,25 @@ void HighResTimer::PreciseDelayMs(DWORD milliseconds, const std::atomic<bool>* c
     } while (now.QuadPart < target);
 }
 
+void HighResTimer::WaitUntilMicroseconds(LONGLONG targetMicroseconds, const std::atomic<bool>* cancel) {
+    // Sleep while more than ~3 ms remain, in slices short enough to notice a
+    // cancel, then spin the rest on the counter for sub-millisecond accuracy.
+    for (;;) {
+        if (cancel && cancel->load()) return;
+        const LONGLONG remaining = targetMicroseconds - GetElapsedMicroseconds();
+        if (remaining <= 0) return;
+        if (remaining > 3000) {
+            const LONGLONG sleepMs = std::min<LONGLONG>(50, remaining / 1000 - 2);
+            Sleep(static_cast<DWORD>(sleepMs));
+        }
+    }
+}
+
+double ScaleGapUs(DWORD gapMs, double speed) {
+    if (!(speed > 0.01)) speed = 0.01;
+    return static_cast<double>(gapMs) * 1000.0 / speed;
+}
+
 DWORD TicksToMs(LONGLONG startTicks, LONGLONG nowTicks, LONGLONG frequency) {
     if (frequency <= 0 || nowTicks <= startTicks) return 0;
     const LONGLONG delta = nowTicks - startTicks;
@@ -95,10 +114,13 @@ HumanizationEngine::HumanizationEngine(double mean, double stddev)
       spread(stddev) {}
 
 DWORD HumanizationEngine::AddVariance(DWORD baseDelay) {
-    std::lock_guard<std::mutex> lock(mtx);
-    double variance = spread > 0.0 ? distribution(generator) : bias;
-    double newDelay = baseDelay + variance;
+    double newDelay = baseDelay + NextVariance();
     return static_cast<DWORD>(std::max(1.0, newDelay));
+}
+
+double HumanizationEngine::NextVariance() {
+    std::lock_guard<std::mutex> lock(mtx);
+    return spread > 0.0 ? distribution(generator) : bias;
 }
 
 void HumanizationEngine::SetDistribution(double mean, double stddev) {
@@ -467,24 +489,25 @@ void FlowEngine::PlaybackThreadFunction() {
         currentLoopIteration.store(currentLoop + 1);
         HighResTimer timer;
         DWORD lastEventTime = 0;
+        // Each event is due at a point on one clock for the whole loop, the sum
+        // of the gaps before it. Waiting each gap out from "now" instead let
+        // the time spent sending input add up, so a long macro ran late, and
+        // truncating each scaled gap to whole ms played 1 ms gaps at 1.5x as 0.
+        double dueUs = 0.0;
 
         for (size_t i = 0; i < eventsCopy.size() && !shouldStopPlayback.load(); ++i) {
             const InputEvent& event = eventsCopy[i];
 
-            DWORD timeDiff = event.timestamp - lastEventTime;
+            const DWORD gap = event.timestamp - lastEventTime;
             lastEventTime = event.timestamp;
 
-            double speed = playbackSpeed.load();
-            if (speed > 0.0 && speed != 1.0 && timeDiff > 0) {
-                timeDiff = static_cast<DWORD>(timeDiff / speed);
-            }
-
-            if (humanizationEnabled.load() && timeDiff > 0) {
-                timeDiff = humanizer.AddVariance(timeDiff);
-            }
-
-            if (timeDiff > 0) {
-                HighResTimer::PreciseDelayMs(timeDiff, &shouldStopPlayback);
+            if (gap > 0) {
+                double gapUs = ScaleGapUs(gap, playbackSpeed.load());
+                if (humanizationEnabled.load()) {
+                    gapUs = std::max(1000.0, gapUs + humanizer.NextVariance() * 1000.0);
+                }
+                dueUs += gapUs;
+                timer.WaitUntilMicroseconds(static_cast<LONGLONG>(dueUs), &shouldStopPlayback);
             }
 
             INPUT input = {};
