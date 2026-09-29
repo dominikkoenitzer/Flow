@@ -120,3 +120,33 @@ TEST_CASE("A zero delay returns promptly") {
     HighResTimer::PreciseDelayMs(0);
     CHECK(timer.GetElapsedMicroseconds() < 50000);
 }
+
+TEST_CASE("Performance counter ticks convert to whole milliseconds") {
+    const LONGLONG freq = 10000000;  // 10 MHz, the usual QPC rate on Windows 10 and later
+
+    CHECK(flow::TicksToMs(0, 0, freq) == 0);
+    CHECK(flow::TicksToMs(0, 9999, freq) == 0);        // 0.9999 ms rounds down
+    CHECK(flow::TicksToMs(0, 10000, freq) == 1);
+    CHECK(flow::TicksToMs(5, 35005, freq) == 3);       // only the difference counts
+    CHECK(flow::TicksToMs(0, 25 * freq + 1234567, freq) == 25123);
+
+    // Odd frequencies divide exactly as well, not through a rounded ticks-per-ms.
+    CHECK(flow::TicksToMs(0, 3579545, 3579545) == 1000);
+    CHECK(flow::TicksToMs(0, 3579545 / 2, 3579545) == 499);
+
+    // A machine up for a year: ticks * 1000 would overflow a naive conversion
+    // of the absolute value, the split into seconds and remainder does not.
+    const LONGLONG yearTicks = 365LL * 24 * 3600 * freq;
+    CHECK(flow::TicksToMs(yearTicks, yearTicks + 42 * freq / 1000, freq) == 42);
+}
+
+TEST_CASE("A tick conversion that cannot be trusted returns zero") {
+    CHECK(flow::TicksToMs(100, 50, 10000000) == 0);    // readings run backwards
+    CHECK(flow::TicksToMs(0, 10000, 0) == 0);          // no frequency
+    CHECK(flow::TicksToMs(0, 10000, -1) == 0);
+}
+
+TEST_CASE("A gap too long for a DWORD saturates instead of wrapping") {
+    const LONGLONG freq = 1000;  // one tick per millisecond
+    CHECK(flow::TicksToMs(0, static_cast<LONGLONG>(MAXDWORD) + 5, freq) == MAXDWORD);
+}

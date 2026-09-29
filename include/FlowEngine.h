@@ -122,6 +122,18 @@ public:
     static void PreciseDelayMs(DWORD milliseconds, const std::atomic<bool>* cancel = nullptr);
 };
 
+/**
+ * @brief Whole milliseconds between two QueryPerformanceCounter readings
+ * @param startTicks The earlier reading
+ * @param nowTicks The later reading
+ * @param frequency Counter frequency from QueryPerformanceFrequency
+ * @return Elapsed milliseconds, rounded down; 0 if the readings run backwards
+ *         or the frequency is not positive
+ * @note Splits into whole seconds and remainder, so ticks * 1000 cannot
+ *       overflow however long the machine has been up.
+ */
+DWORD TicksToMs(LONGLONG startTicks, LONGLONG nowTicks, LONGLONG frequency);
+
 // ---- HumanizationEngine ----
 
 /**
@@ -197,7 +209,8 @@ private:
     std::vector<InputEvent> recordedEvents;  ///< Captured event buffer
     std::atomic<bool> isRecording;           ///< Recording active flag
     std::mutex recordMutex;                  ///< Recording buffer protection
-    DWORD recordingStartTime;                ///< Recording session start time
+    LONGLONG recordingStartTicks;            ///< Performance counter at the recording start
+    LONGLONG counterFrequency;               ///< QueryPerformanceFrequency, fixed at boot
     std::atomic<DWORD> controlKeys[4];       ///< FLOW's own hotkeys, never recorded
     bool skippedPress[3];                    ///< Left/right/middle press on FLOW left out, so its release is too
 
@@ -223,6 +236,7 @@ private:
     void PlaybackThreadFunction();
     void SendMouseEvent(DWORD flags, POINT coords);
     void SendKeyboardEvent(WORD vkCode, DWORD scanCode, DWORD flags);
+    DWORD RecordingElapsedMs() const;
 
 public:
     // ===== Construction & Destruction =====
@@ -338,6 +352,12 @@ public:
      * @return Event count
      */
     size_t GetEventCount() const { return recordedEvents.size(); }
+
+    /**
+     * @brief Copy of the recorded events, taken under the recording lock
+     * @return Every event in recording order
+     */
+    std::vector<InputEvent> GetEvents();
 
     /**
      * @brief Get the duration of the recorded macro in milliseconds
