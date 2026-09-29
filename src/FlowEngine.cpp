@@ -124,6 +124,14 @@ double HumanizationEngine::NextVariance() {
     return spread > 0.0 ? distribution(generator) : bias;
 }
 
+double PlaybackGapUs(ULONGLONG gapUs, double speed, HumanizationEngine* humanizer) {
+    double waitUs = ScaleGapUs(gapUs, speed);
+    if (humanizer && waitUs >= 1000.0) {
+        waitUs = std::max(1000.0, waitUs + humanizer->NextVariance() * 1000.0);
+    }
+    return waitUs;
+}
+
 void HumanizationEngine::SetDistribution(double mean, double stddev) {
     std::lock_guard<std::mutex> lock(mtx);
     bias = mean;
@@ -539,14 +547,8 @@ void FlowEngine::PlaybackThreadFunction() {
             lastEventTime = event.timestampUs;
 
             if (gap > 0) {
-                double gapUs = ScaleGapUs(gap, playbackSpeed.load());
-                // Jitter only gaps of a millisecond or more, as before the
-                // stamps were finer: events inside one millisecond are one
-                // gesture, and spreading them out would slow it down.
-                if (humanizationEnabled.load() && gap >= 1000) {
-                    gapUs = std::max(1000.0, gapUs + humanizer.NextVariance() * 1000.0);
-                }
-                dueUs += gapUs;
+                dueUs += PlaybackGapUs(gap, playbackSpeed.load(),
+                                       humanizationEnabled.load() ? &humanizer : nullptr);
                 timer.WaitUntilMicroseconds(static_cast<LONGLONG>(dueUs), &shouldStopPlayback);
             }
 

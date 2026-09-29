@@ -198,3 +198,24 @@ TEST_CASE("WaitUntilMicroseconds stops waiting when cancelled") {
     timer.WaitUntilMicroseconds(10 * 1000 * 1000, &cancel);  // ten seconds
     CHECK(timer.GetElapsedMicroseconds() < 1000000);
 }
+
+TEST_CASE("Playback jitters a wait by the humanization, in milliseconds") {
+    flow::HumanizationEngine humanizer(4.0, 0.0);  // no spread: the bias alone, 4 ms
+    CHECK(flow::PlaybackGapUs(10000, 1.0, &humanizer) == doctest::Approx(14000.0));
+    CHECK(flow::PlaybackGapUs(10000, 2.0, &humanizer) == doctest::Approx(9000.0));  // scaled, then jittered
+    CHECK(flow::PlaybackGapUs(10000, 1.0, nullptr) == doctest::Approx(10000.0));   // humanization off
+}
+
+TEST_CASE("Playback leaves waits under a millisecond unjittered") {
+    // A 1 ms gap at 10x is a 100 us wait. Old builds truncated it to 0 ms and
+    // skipped the jitter; pushing it up to a millisecond would slow the macro.
+    flow::HumanizationEngine humanizer(4.0, 0.0);
+    CHECK(flow::PlaybackGapUs(1000, 10.0, &humanizer) == doctest::Approx(100.0));
+    CHECK(flow::PlaybackGapUs(250, 1.0, &humanizer) == doctest::Approx(250.0));
+    CHECK(flow::PlaybackGapUs(0, 1.0, &humanizer) == doctest::Approx(0.0));
+}
+
+TEST_CASE("Negative jitter never shortens a wait below a millisecond") {
+    flow::HumanizationEngine humanizer(-50.0, 0.0);
+    CHECK(flow::PlaybackGapUs(2000, 1.0, &humanizer) == doctest::Approx(1000.0));
+}
