@@ -80,7 +80,7 @@ constexpr int INTERVAL_HELP_Y = 582;
 constexpr int FOOT_DIV_Y   = 608;
 constexpr int FOOT_Y       = 622;
 
-// DPI scale factor (1.0 at 96 DPI), read from the monitor's DPI at startup.
+// DPI scale factor (1.0 at 96 DPI) of the monitor the main window is on.
 extern double g_scale;
 
 inline int   Sc(int v)    { return (int)(v * g_scale + 0.5); }
