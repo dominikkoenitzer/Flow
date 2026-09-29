@@ -17,7 +17,7 @@
 
 ## Features
 
-- **Macro recording and playback.** Captures mouse moves, clicks (left, right, middle and the two side buttons), vertical and horizontal wheel scrolling, and keystrokes with millisecond timing, then replays them with adjustable speed and loop count, infinite loops included.
+- **Macro recording and playback.** Captures mouse moves, clicks (left, right, middle and the two side buttons), vertical and horizontal wheel scrolling, and keystrokes with microsecond timestamps, then replays them with adjustable speed and loop count, infinite loops included.
 - **High-speed auto-clicker.** A dedicated, high-priority clicker at a configurable interval, independent of recorded macros.
 - **Low-latency timing.** A busy-wait `QueryPerformanceCounter` timer gets sub-10 ms precision, which plain `Sleep` cannot.
 - **Humanization.** Optional Gaussian jitter on delays, to avoid fixed-interval patterns.
