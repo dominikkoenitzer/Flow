@@ -104,7 +104,7 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
 // ---- construction and teardown ----
 
 FlowEngine::FlowEngine()
-    : isRecording(false), recordingStartTime(0), isClicking(false),
+    : isRecording(false), recordingStartTime(0), controlKeys{}, isClicking(false),
       clickInterval(DEFAULT_CLICK_INTERVAL), isPlaying(false), shouldStopPlayback(false),
       loopCount(1), currentLoopIteration(0), playbackSpeed(1.0), humanizationEnabled(true) {
     instance = this;
@@ -223,11 +223,12 @@ void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
 }
 
 void FlowEngine::OnKeyboardEvent(WPARAM wParam, KBDLLHOOKSTRUCT* keyStruct) {
-    // Filter out hotkey keys to prevent recording control keys
-    // F6 (auto-clicker toggle), F8 (record toggle)
+    // Leave FLOW's own hotkeys out of the recording, as set by SetControlKeys.
+    // On replay they would fire the hotkey again: the stop key ends a looped
+    // run, the record key starts a new recording and wipes the macro.
     DWORD vk = keyStruct->vkCode;
-    if (vk == VK_F6 || vk == VK_F8) {
-        return; // Don't record control hotkeys
+    for (const auto& key : controlKeys) {
+        if (vk == key.load()) return;
     }
 
     InputEvent event;
@@ -278,6 +279,13 @@ void FlowEngine::StopRecording() {
 void FlowEngine::ClearRecording() {
     std::lock_guard<std::mutex> lock(recordMutex);
     recordedEvents.clear();
+}
+
+void FlowEngine::SetControlKeys(DWORD record, DWORD playback, DWORD clicker, DWORD stop) {
+    controlKeys[0].store(record);
+    controlKeys[1].store(playback);
+    controlKeys[2].store(clicker);
+    controlKeys[3].store(stop);
 }
 
 // ---- auto-clicker ----
