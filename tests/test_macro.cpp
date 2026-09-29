@@ -119,15 +119,28 @@ TEST_CASE("Unrecognised window messages are ignored") {
 }
 
 TEST_CASE("The control hotkeys are filtered out of a recording") {
-    // Recording toggles on F8 and the clicker on F6. Capturing those would
-    // replay the toggle and stop the macro partway through playback.
+    // Record F8, play F9, clicker F6, stop Pause by default. Capturing those
+    // would replay them and stop or restart the macro partway through.
     FlowEngine engine;
     pushKey(engine, WM_KEYDOWN, VK_F6);
     pushKey(engine, WM_KEYDOWN, VK_F8);
-    pushKey(engine, WM_KEYDOWN, 'P');
+    pushKey(engine, WM_KEYDOWN, VK_F9);
+    pushKey(engine, WM_KEYDOWN, VK_PAUSE);
     CHECK(engine.GetEventCount() == 0);
 
     pushKey(engine, WM_KEYDOWN, VK_F7);  // not a control key
+    pushKey(engine, WM_KEYDOWN, 'P');    // the old playback key, a plain letter now
+    CHECK(engine.GetEventCount() == 2);
+}
+
+TEST_CASE("The filter follows the hotkeys the user set") {
+    FlowEngine engine;
+    engine.SetControlKeys(VK_F2, VK_F3, VK_F4, VK_F5);
+    pushKey(engine, WM_KEYDOWN, VK_F2);
+    pushKey(engine, WM_KEYDOWN, VK_F5);
+    CHECK(engine.GetEventCount() == 0);
+
+    pushKey(engine, WM_KEYDOWN, VK_F8);  // a default no longer in use
     CHECK(engine.GetEventCount() == 1);
 }
 

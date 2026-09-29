@@ -104,7 +104,9 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
 // ---- construction and teardown ----
 
 FlowEngine::FlowEngine()
-    : isRecording(false), recordingStartTime(0), controlKeys{}, skippedPress{}, isClicking(false),
+    : isRecording(false), recordingStartTime(0),
+      // The default hotkeys (see AppState) until SetControlKeys brings the user's.
+      controlKeys{ {VK_F8}, {VK_F9}, {VK_F6}, {VK_PAUSE} }, skippedPress{}, isClicking(false),
       clickInterval(DEFAULT_CLICK_INTERVAL), isPlaying(false), shouldStopPlayback(false),
       loopCount(1), currentLoopIteration(0), playbackSpeed(1.0), humanizationEnabled(true) {
     instance = this;
