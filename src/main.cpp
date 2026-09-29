@@ -404,8 +404,22 @@ static void PaintUI(HDC hdc, RECT client) {
     }
 }
 
+void ApplyDpi(HWND hwnd, UINT dpi);
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case WM_DPICHANGED: {
+            // Moved onto a monitor with another scale: rebuild the fonts and the
+            // layout for its DPI, take the rectangle Windows suggests, repaint.
+            ApplyDpi(hwnd, LOWORD(wParam));
+            const RECT* r = (const RECT*)lParam;
+            SetWindowPos(hwnd, NULL, r->left, r->top,
+                         r->right - r->left, r->bottom - r->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
+            return 0;
+        }
+
         case WM_ERASEBKGND:
             return 1;  // background painted in WM_PAINT
 
