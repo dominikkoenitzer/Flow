@@ -511,6 +511,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wParam == TIMER_STATUS_CHECK) {
                 if (g_app.isPlaying && g_app.engine && !g_app.engine->IsPlaybackActive()) {
                     g_app.isPlaying = false;
+                    // A recording started during playback owns the title now.
+                    if (!g_app.isRecording) SetWindowTextA(hwnd, "FLOW");
                     UpdateStatusDisplay();
                 }
             }
