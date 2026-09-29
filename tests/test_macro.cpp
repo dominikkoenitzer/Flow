@@ -14,6 +14,8 @@
 
 #include "FlowEngine.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -88,6 +90,34 @@ std::vector<char> header(size_t count) {
     bytes[3] = 'W';
     std::memcpy(bytes.data() + 4, &count, sizeof(count));
     return bytes;
+}
+
+/** Append a value's raw little-endian bytes. */
+template <typename T>
+void append(std::vector<char>& bytes, T value) {
+    const char* p = reinterpret_cast<const char*>(&value);
+    bytes.insert(bytes.end(), p, p + sizeof(value));
+}
+
+/** A version 2 header: magic, marker, version, count. */
+std::vector<char> headerV2(uint32_t version, uint64_t count) {
+    std::vector<char> bytes = {'F', 'L', 'O', 'W'};
+    append<uint64_t>(bytes, flow::MACRO_VERSION_MARKER);
+    append<uint32_t>(bytes, version);
+    append<uint64_t>(bytes, count);
+    return bytes;
+}
+
+/** One event as an unversioned build wrote it: the raw 28-byte struct. */
+void appendV1Event(std::vector<char>& bytes, uint32_t type, int32_t x, int32_t y,
+                   uint32_t vk, uint32_t timestamp, uint32_t scan, uint32_t flags) {
+    append(bytes, type);
+    append(bytes, x);
+    append(bytes, y);
+    append(bytes, vk);
+    append(bytes, timestamp);
+    append(bytes, scan);
+    append(bytes, flags);
 }
 
 }  // namespace
@@ -283,13 +313,158 @@ TEST_CASE("LoadMacro rejects a truncated payload") {
 
     // Chop the final event in half: the count still says 7, the bytes say 6.5.
     auto bytes = readAll(good.path);
-    REQUIRE(bytes.size() > sizeof(InputEvent));
-    bytes.resize(bytes.size() - sizeof(InputEvent) / 2);
+    REQUIRE(bytes.size() > flow::MACRO_EVENT_SIZE_V2);
+    bytes.resize(bytes.size() - flow::MACRO_EVENT_SIZE_V2 / 2);
     writeBytes(bad.path, bytes);
 
     FlowEngine engine;
     CHECK_FALSE(engine.LoadMacro(bad.path));
     CHECK(engine.GetEventCount() == 0);  // no partial load left behind
+}
+
+TEST_CASE("A failed load leaves the macro already loaded in place") {
+    ScratchFile file(L"keep_on_fail");
+    auto bytes = headerV2(flow::MACRO_FORMAT_VERSION, 2);
+    appendV1Event(bytes, 0, 1, 1, 0, 5, 0, 0);
+    append<int32_t>(bytes, 0);
+    appendV1Event(bytes, 0, 2, 2, 0, 3, 0, 0);  // runs backwards: 5 then 3
+    append<int32_t>(bytes, 0);
+    writeBytes(file.path, bytes);
+
+    FlowEngine engine;
+    recordSample(engine);
+    CHECK_FALSE(engine.LoadMacro(file.path));
+    CHECK(engine.GetEventCount() == 7);
+}
+
+TEST_CASE("A saved macro starts with the format version") {
+    ScratchFile file(L"version_header");
+    FlowEngine engine;
+    recordSample(engine);
+    REQUIRE(engine.SaveMacro(file.path));
+
+    const auto bytes = readAll(file.path);
+    const auto expected = headerV2(flow::MACRO_FORMAT_VERSION, 7);
+    REQUIRE(bytes.size() == expected.size() + 7 * flow::MACRO_EVENT_SIZE_V2);
+    CHECK(std::equal(expected.begin(), expected.end(), bytes.begin()));
+}
+
+TEST_CASE("A version 2 file keeps every field of every event") {
+    ScratchFile file(L"v2_fields");
+    FlowEngine saver;
+    pushMouse(saver, WM_MOUSEMOVE, -1920, 1079);
+    pushKey(saver, WM_SYSKEYDOWN, VK_MENU);
+    REQUIRE(saver.SaveMacro(file.path));
+
+    FlowEngine loader;
+    REQUIRE(loader.LoadMacro(file.path));
+    const auto a = saver.GetEvents();
+    const auto b = loader.GetEvents();
+    REQUIRE(a.size() == b.size());
+    for (size_t i = 0; i < a.size(); ++i) {
+        CHECK(a[i].type == b[i].type);
+        CHECK(a[i].screenCoords.x == b[i].screenCoords.x);
+        CHECK(a[i].screenCoords.y == b[i].screenCoords.y);
+        CHECK(a[i].virtualKeyCode == b[i].virtualKeyCode);
+        CHECK(a[i].timestamp == b[i].timestamp);
+        CHECK(a[i].scanCode == b[i].scanCode);
+        CHECK(a[i].flags == b[i].flags);
+        CHECK(a[i].mouseData == b[i].mouseData);
+    }
+}
+
+TEST_CASE("An unversioned file from an older build still loads") {
+    // Byte for byte what the old SaveMacro wrote: magic, a 64-bit count, then
+    // each InputEvent struct raw, 28 bytes, with no version anywhere.
+    ScratchFile file(L"legacy");
+    auto bytes = header(3);
+    appendV1Event(bytes, 0, -50, 900, 0, 0, 0, 0);          // MOUSE_MOVE
+    appendV1Event(bytes, 1, -50, 900, 0, 16, 0, 0);         // MOUSE_LEFT_DOWN
+    appendV1Event(bytes, 7, 0, 0, 'A', 31, 30, 0x10);       // KEY_DOWN
+    REQUIRE(bytes.size() == 12 + 3 * flow::MACRO_EVENT_SIZE_V1);
+    writeBytes(file.path, bytes);
+
+    FlowEngine engine;
+    REQUIRE(engine.LoadMacro(file.path));
+    const auto events = engine.GetEvents();
+    REQUIRE(events.size() == 3);
+    CHECK(events[0].type == InputEvent::Type::MOUSE_MOVE);
+    CHECK(events[0].screenCoords.x == -50);
+    CHECK(events[0].screenCoords.y == 900);
+    CHECK(events[1].type == InputEvent::Type::MOUSE_LEFT_DOWN);
+    CHECK(events[1].timestamp == 16);
+    CHECK(events[2].type == InputEvent::Type::KEY_DOWN);
+    CHECK(events[2].virtualKeyCode == 'A');
+    CHECK(events[2].scanCode == 30);
+    CHECK(events[2].flags == 0x10);
+    CHECK(events[2].mouseData == 0);
+    CHECK(engine.GetDurationMs() == 31);
+
+    // Saving it again upgrades it to the current version.
+    ScratchFile upgraded(L"legacy_upgraded");
+    REQUIRE(engine.SaveMacro(upgraded.path));
+    FlowEngine reloaded;
+    REQUIRE(reloaded.LoadMacro(upgraded.path));
+    CHECK(reloaded.GetEventCount() == 3);
+    CHECK(readAll(upgraded.path).size() == headerV2(2, 3).size() + 3 * flow::MACRO_EVENT_SIZE_V2);
+}
+
+TEST_CASE("An unversioned file with an event type it never had is rejected") {
+    ScratchFile file(L"legacy_bad_type");
+    auto bytes = header(1);
+    appendV1Event(bytes, 99, 0, 0, 0, 0, 0, 0);
+    writeBytes(file.path, bytes);
+
+    FlowEngine engine;
+    CHECK_FALSE(engine.LoadMacro(file.path));
+}
+
+TEST_CASE("A format version newer than this build is refused cleanly") {
+    ScratchFile file(L"future");
+    auto bytes = headerV2(flow::MACRO_FORMAT_VERSION + 1, 1);
+    bytes.resize(bytes.size() + 64, 0);  // an event of some future size
+    writeBytes(file.path, bytes);
+
+    FlowEngine engine;
+    recordSample(engine);
+    CHECK_FALSE(engine.LoadMacro(file.path));
+    CHECK(engine.GetEventCount() == 7);  // what was loaded before is untouched
+}
+
+TEST_CASE("A versioned header that is cut short or claims version 0 or 1 is refused") {
+    FlowEngine engine;
+
+    SUBCASE("marker without a version") {
+        ScratchFile file(L"cut_version");
+        auto bytes = headerV2(flow::MACRO_FORMAT_VERSION, 0);
+        bytes.resize(4 + 8 + 2);
+        writeBytes(file.path, bytes);
+        CHECK_FALSE(engine.LoadMacro(file.path));
+    }
+
+    SUBCASE("version without a count") {
+        ScratchFile file(L"cut_count");
+        auto bytes = headerV2(flow::MACRO_FORMAT_VERSION, 0);
+        bytes.resize(4 + 8 + 4 + 3);
+        writeBytes(file.path, bytes);
+        CHECK_FALSE(engine.LoadMacro(file.path));
+    }
+
+    SUBCASE("explicit old versions") {
+        for (uint32_t version : {0u, 1u}) {
+            ScratchFile file(L"old_explicit");
+            writeBytes(file.path, headerV2(version, 0));
+            CHECK_FALSE(engine.LoadMacro(file.path));
+        }
+    }
+
+    SUBCASE("absurd count") {
+        ScratchFile file(L"v2_absurd");
+        writeBytes(file.path, headerV2(flow::MACRO_FORMAT_VERSION, static_cast<uint64_t>(1) << 40));
+        CHECK_FALSE(engine.LoadMacro(file.path));
+    }
+
+    CHECK(engine.GetEventCount() == 0);
 }
 
 TEST_CASE("SaveMacro reports failure on an unwritable path") {

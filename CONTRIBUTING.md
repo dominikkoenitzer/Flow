@@ -87,7 +87,7 @@ GUI, which still need manual verification.
 - **DPI:** every pixel literal in layout/geometry must be wrapped in `Sc(int)` / `Scf(float)`. An unwrapped coordinate is correct at 100% but misplaced at higher DPI.
 - **GUI layout is manual.** `PaintUI` (painted text/dividers) and `CreateControls` (child widgets) read the **same** `constexpr` Y constants. If you move a control, move its label and divider too. Nothing here is auto-laid-out.
 - **MinGW `swprintf`:** use `%ls` for `wchar_t*` args (plain `%s` is treated as narrow and silently truncates).
-- The binary **macro format** (`.rec`) serializes padded structs; changing `InputEvent` breaks existing saved files. Avoid changing it without a migration plan.
+- The binary **macro format** (`.rec`) is versioned and written field by field; the layout is documented in `include/FlowEngine.h`. A new field means a new `MACRO_FORMAT_VERSION`, and `LoadMacro` must keep reading every older version.
 
 ## Submitting changes
 
