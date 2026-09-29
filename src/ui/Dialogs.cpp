@@ -113,6 +113,29 @@ static RECT PlanDialog(HWND hDlg, HWND parent, int w, int h, UINT& dpi) {
     return r;
 }
 
+// The dialog manager's own DPI scaling only knows a template's controls and
+// fonts, and would fight ours; FLOW's dialogs lay themselves out again instead.
+static void DisableDialogAutoDpi(HWND hDlg) {
+    typedef BOOL(WINAPI* SetDialogDpiChangeBehaviorFn)(HWND, int, int);
+    static auto fn = (SetDialogDpiChangeBehaviorFn)(void*)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "SetDialogDpiChangeBehavior");
+    if (fn) fn(hDlg, 1 /* DDC_DISABLE_ALL */, 1);
+}
+
+// A dialog dragged onto a monitor with another scale: rebuild its fonts and
+// layout for the new DPI, take the rectangle Windows suggests, repaint.
+// Returns true when `msg` was handled here.
+static bool HandleDialogDpi(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam,
+                            DialogScale& s, void (*layout)(HWND)) {
+    if (msg != WM_DPICHANGED) return false;
+    ScaleDialog(hDlg, s, LOWORD(wParam), layout);
+    const RECT* r = (const RECT*)lParam;
+    SetWindowPos(hDlg, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    RedrawWindow(hDlg, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    return true;
+}
+
 // Places a control at design units through Sc(), and optionally sets its font.
 struct DlgPlace { int id, x, y, w, h; HFONT font; };
 
@@ -180,6 +203,8 @@ static void RestoreDialogClassBrush(HWND hDlg) {
 
 // Hotkey dialog callback
 LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (HandleDialogDpi(hDlg, msg, wParam, lParam, s_hotkeyScale, LayoutHotkeyDialog))
+        return TRUE;
     switch (msg) {
         case WM_CTLCOLORSTATIC: {
             static HBRUSH bgB = CreateSolidBrush(BG_PRIMARY);
@@ -341,6 +366,7 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
 
     HINSTANCE hi = GetModuleHandle(NULL);
     PatchDialogClassBrush(hDlg);
+    DisableDialogAutoDpi(hDlg);
 
     auto makeStatic = [&](int id, const wchar_t* text) {
         CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT,
@@ -423,6 +449,8 @@ static void LayoutAboutDialog(HWND hDlg) {
 }
 
 LRESULT CALLBACK AboutDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (HandleDialogDpi(hDlg, msg, wParam, lParam, s_aboutScale, LayoutAboutDialog))
+        return TRUE;
     switch (msg) {
         case WM_CTLCOLORSTATIC: {
             static HBRUSH bgB = CreateSolidBrush(BG_PRIMARY);
@@ -475,6 +503,7 @@ void ShowAboutDialog(HWND hwnd) {
 
     HINSTANCE hi = GetModuleHandle(NULL);
     PatchDialogClassBrush(hDlg);
+    DisableDialogAutoDpi(hDlg);
 
     CreateWindowExW(0, L"STATIC", L"Flow", WS_CHILD | WS_VISIBLE | SS_LEFT,
         0, 0, 0, 0, hDlg, (HMENU)IDC_ABOUT_TITLE, hi, NULL);
