@@ -77,14 +77,14 @@ struct InputEvent {
     Type type;                  ///< Event type identifier
     POINT screenCoords;         ///< Screen coordinates (for mouse events)
     DWORD virtualKeyCode;       ///< Virtual key code (for keyboard events)
-    DWORD timestamp;            ///< Relative timestamp in milliseconds
+    ULONGLONG timestampUs;      ///< Microseconds since the recording started
     DWORD scanCode;             ///< Hardware scan code
     DWORD flags;                ///< Additional event flags
     LONG mouseData;             ///< Wheel delta, in WHEEL_DELTA (120) steps per notch; 0 otherwise
 
     /** @brief Default constructor initializes all fields to safe defaults */
     InputEvent() : type(Type::MOUSE_MOVE), screenCoords{0, 0},
-                   virtualKeyCode(0), timestamp(0), scanCode(0), flags(0), mouseData(0) {}
+                   virtualKeyCode(0), timestampUs(0), scanCode(0), flags(0), mouseData(0) {}
 };
 
 // ---- .rec file format ----
@@ -95,9 +95,10 @@ struct InputEvent {
 //   "FLOW"                              "FLOW"
 //   u64 0xFFFFFFFFFFFFFFFF  marker      u64 event count
 //   u32 format version                  28-byte events: type, x, y, virtual key,
-//   u64 event count                     timestamp, scan code, flags
-//   32-byte events: the same seven
-//   fields, then i32 mouse data
+//   u64 event count                     timestamp (ms), scan code, flags
+//   36-byte events: type, x, y,
+//   virtual key, u64 timestamp (us),
+//   scan code, flags, i32 mouse data
 //
 // A version 1 file cannot start with the marker: its count would need more
 // bytes than any file can hold. So the marker tells the two apart, old files
@@ -110,7 +111,7 @@ constexpr uint32_t MACRO_FORMAT_VERSION = 2;
 constexpr size_t MACRO_EVENT_SIZE_V1 = 28;
 
 /** @brief Bytes per event in a version 2 file */
-constexpr size_t MACRO_EVENT_SIZE_V2 = 32;
+constexpr size_t MACRO_EVENT_SIZE_V2 = 36;
 
 /** @brief What follows "FLOW" in a versioned file, before the version */
 constexpr uint64_t MACRO_VERSION_MARKER = 0xFFFFFFFFFFFFFFFFULL;
@@ -173,25 +174,25 @@ public:
 };
 
 /**
- * @brief A recorded gap in microseconds at a playback speed
- * @param gapMs Recorded gap in milliseconds
+ * @brief A recorded gap at a playback speed
+ * @param gapUs Recorded gap in microseconds
  * @param speed Playback speed multiplier; clamped to the engine's 0.01 floor
- * @return The gap to wait, kept fractional so short gaps are not truncated to
- *         zero when the speed does not divide them evenly
+ * @return The gap to wait in microseconds, kept fractional so short gaps are
+ *         not truncated to zero when the speed does not divide them evenly
  */
-double ScaleGapUs(DWORD gapMs, double speed);
+double ScaleGapUs(ULONGLONG gapUs, double speed);
 
 /**
- * @brief Whole milliseconds between two QueryPerformanceCounter readings
+ * @brief Whole microseconds between two QueryPerformanceCounter readings
  * @param startTicks The earlier reading
  * @param nowTicks The later reading
  * @param frequency Counter frequency from QueryPerformanceFrequency
- * @return Elapsed milliseconds, rounded down; 0 if the readings run backwards
+ * @return Elapsed microseconds, rounded down; 0 if the readings run backwards
  *         or the frequency is not positive
- * @note Splits into whole seconds and remainder, so ticks * 1000 cannot
+ * @note Splits into whole seconds and remainder, so ticks * 1000000 cannot
  *       overflow however long the machine has been up.
  */
-DWORD TicksToMs(LONGLONG startTicks, LONGLONG nowTicks, LONGLONG frequency);
+ULONGLONG TicksToUs(LONGLONG startTicks, LONGLONG nowTicks, LONGLONG frequency);
 
 // ---- HumanizationEngine ----
 
@@ -301,7 +302,7 @@ private:
     void PlaybackThreadFunction();
     void SendMouseEvent(DWORD flags, POINT coords);
     void SendKeyboardEvent(WORD vkCode, DWORD scanCode, DWORD flags);
-    DWORD RecordingElapsedMs() const;
+    ULONGLONG RecordingElapsedUs() const;
 
 public:
     // ===== Construction & Destruction =====
@@ -429,7 +430,9 @@ public:
      * @return Timestamp of the last recorded event (0 if empty)
      */
     DWORD GetDurationMs() const {
-        return recordedEvents.empty() ? 0 : recordedEvents.back().timestamp;
+        if (recordedEvents.empty()) return 0;
+        const ULONGLONG ms = recordedEvents.back().timestampUs / 1000;
+        return ms > MAXDWORD ? MAXDWORD : static_cast<DWORD>(ms);
     }
 
     // ===== Playback Control =====

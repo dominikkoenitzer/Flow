@@ -112,6 +112,19 @@ std::vector<char> headerV2(uint32_t version, uint64_t count) {
     return bytes;
 }
 
+/** One version 2 event: the 36-byte record SaveMacro writes. */
+void appendV2Event(std::vector<char>& bytes, uint32_t type, int32_t x, int32_t y, uint32_t vk,
+                   uint64_t timestampUs, uint32_t scan, uint32_t flags, int32_t mouseData) {
+    append(bytes, type);
+    append(bytes, x);
+    append(bytes, y);
+    append(bytes, vk);
+    append(bytes, timestampUs);
+    append(bytes, scan);
+    append(bytes, flags);
+    append(bytes, mouseData);
+}
+
 /** One event as an unversioned build wrote it: the raw 28-byte struct. */
 void appendV1Event(std::vector<char>& bytes, uint32_t type, int32_t x, int32_t y,
                    uint32_t vk, uint32_t timestamp, uint32_t scan, uint32_t flags) {
@@ -157,9 +170,9 @@ TEST_CASE("Events are stamped finer than the 16 ms system tick") {
     const auto events = engine.GetEvents();
     REQUIRE(events.size() == 5);
     for (size_t i = 1; i < events.size(); ++i) {
-        // Lower bound only: each stamp is rounded down, so a 3 ms wait can read
-        // as 2 ms, and a descheduled runner can only make a gap longer.
-        CHECK(events[i].timestamp - events[i - 1].timestamp >= 2);
+        // Lower bound only: a descheduled runner can only make a gap longer.
+        // Each stamp is rounded down to the microsecond, hence the 1 us slack.
+        CHECK(events[i].timestampUs - events[i - 1].timestampUs >= 2999);
     }
 }
 
@@ -259,8 +272,7 @@ TEST_CASE("An unversioned file cannot hold a wheel event") {
 TEST_CASE("A version 2 file with a type past the last known one is rejected") {
     ScratchFile file(L"v2_bad_type");
     auto bytes = headerV2(flow::MACRO_FORMAT_VERSION, 1);
-    appendV1Event(bytes, static_cast<uint32_t>(InputEvent::Type::MOUSE_X2_UP) + 1, 0, 0, 0, 0, 0, 0);
-    append<int32_t>(bytes, 0);
+    appendV2Event(bytes, static_cast<uint32_t>(InputEvent::Type::MOUSE_X2_UP) + 1, 0, 0, 0, 0, 0, 0, 0);
     writeBytes(file.path, bytes);
 
     FlowEngine engine;
@@ -417,10 +429,8 @@ TEST_CASE("LoadMacro rejects a truncated payload") {
 TEST_CASE("A failed load leaves the macro already loaded in place") {
     ScratchFile file(L"keep_on_fail");
     auto bytes = headerV2(flow::MACRO_FORMAT_VERSION, 2);
-    appendV1Event(bytes, 0, 1, 1, 0, 5, 0, 0);
-    append<int32_t>(bytes, 0);
-    appendV1Event(bytes, 0, 2, 2, 0, 3, 0, 0);  // runs backwards: 5 then 3
-    append<int32_t>(bytes, 0);
+    appendV2Event(bytes, 0, 1, 1, 0, 5000, 0, 0, 0);
+    appendV2Event(bytes, 0, 2, 2, 0, 3000, 0, 0, 0);  // runs backwards: 5 ms then 3 ms
     writeBytes(file.path, bytes);
 
     FlowEngine engine;
@@ -458,11 +468,28 @@ TEST_CASE("A version 2 file keeps every field of every event") {
         CHECK(a[i].screenCoords.x == b[i].screenCoords.x);
         CHECK(a[i].screenCoords.y == b[i].screenCoords.y);
         CHECK(a[i].virtualKeyCode == b[i].virtualKeyCode);
-        CHECK(a[i].timestamp == b[i].timestamp);
+        CHECK(a[i].timestampUs == b[i].timestampUs);
         CHECK(a[i].scanCode == b[i].scanCode);
         CHECK(a[i].flags == b[i].flags);
         CHECK(a[i].mouseData == b[i].mouseData);
     }
+}
+
+TEST_CASE("A version 2 file keeps time below a millisecond") {
+    ScratchFile file(L"v2_micro");
+    auto bytes = headerV2(flow::MACRO_FORMAT_VERSION, 3);
+    appendV2Event(bytes, 0, 0, 0, 0, 0, 0, 0, 0);
+    appendV2Event(bytes, 0, 1, 0, 0, 250, 0, 0, 0);     // a quarter millisecond later
+    appendV2Event(bytes, 0, 2, 0, 0, 1750, 0, 0, 0);
+    writeBytes(file.path, bytes);
+
+    FlowEngine engine;
+    REQUIRE(engine.LoadMacro(file.path));
+    const auto events = engine.GetEvents();
+    REQUIRE(events.size() == 3);
+    CHECK(events[1].timestampUs == 250);
+    CHECK(events[2].timestampUs == 1750);
+    CHECK(engine.GetDurationMs() == 1);  // whole milliseconds for the display
 }
 
 TEST_CASE("An unversioned file from an older build still loads") {
@@ -484,7 +511,7 @@ TEST_CASE("An unversioned file from an older build still loads") {
     CHECK(events[0].screenCoords.x == -50);
     CHECK(events[0].screenCoords.y == 900);
     CHECK(events[1].type == InputEvent::Type::MOUSE_LEFT_DOWN);
-    CHECK(events[1].timestamp == 16);
+    CHECK(events[1].timestampUs == 16000);  // whole ms then, microseconds now
     CHECK(events[2].type == InputEvent::Type::KEY_DOWN);
     CHECK(events[2].virtualKeyCode == 'A');
     CHECK(events[2].scanCode == 30);

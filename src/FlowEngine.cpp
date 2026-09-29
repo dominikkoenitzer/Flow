@@ -89,16 +89,16 @@ void HighResTimer::WaitUntilMicroseconds(LONGLONG targetMicroseconds, const std:
     }
 }
 
-double ScaleGapUs(DWORD gapMs, double speed) {
+double ScaleGapUs(ULONGLONG gapUs, double speed) {
     if (!(speed > 0.01)) speed = 0.01;
-    return static_cast<double>(gapMs) * 1000.0 / speed;
+    return static_cast<double>(gapUs) / speed;
 }
 
-DWORD TicksToMs(LONGLONG startTicks, LONGLONG nowTicks, LONGLONG frequency) {
+ULONGLONG TicksToUs(LONGLONG startTicks, LONGLONG nowTicks, LONGLONG frequency) {
     if (frequency <= 0 || nowTicks <= startTicks) return 0;
     const LONGLONG delta = nowTicks - startTicks;
-    const LONGLONG ms = (delta / frequency) * 1000 + ((delta % frequency) * 1000) / frequency;
-    return ms > static_cast<LONGLONG>(MAXDWORD) ? MAXDWORD : static_cast<DWORD>(ms);
+    return static_cast<ULONGLONG>((delta / frequency) * 1000000
+                                  + ((delta % frequency) * 1000000) / frequency);
 }
 
 // ---- HumanizationEngine ----
@@ -226,11 +226,12 @@ LRESULT CALLBACK FlowEngine::KeyboardHookProc(int nCode, WPARAM wParam, LPARAM l
 
 // Recording time comes from the performance counter. GetTickCount only moves
 // every 10 to 16 ms, so events closer together than that were stamped with the
-// same time and a steady mouse drag replayed as bursts.
-DWORD FlowEngine::RecordingElapsedMs() const {
+// same time and a steady mouse drag replayed as bursts. Microseconds keep the
+// spacing of a 1000 Hz mouse, whose reports are 1 ms apart.
+ULONGLONG FlowEngine::RecordingElapsedUs() const {
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
-    return TicksToMs(recordingStartTicks, now.QuadPart, counterFrequency);
+    return TicksToUs(recordingStartTicks, now.QuadPart, counterFrequency);
 }
 
 // True when the window under a screen point belongs to this process: the main
@@ -246,7 +247,7 @@ static bool IsOwnWindowAt(POINT pt) {
 void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
     InputEvent event;
     event.screenCoords = mouseStruct->pt;
-    event.timestamp = RecordingElapsedMs();
+    event.timestampUs = RecordingElapsedUs();
     event.flags = mouseStruct->flags;
 
     switch (wParam) {
@@ -352,7 +353,7 @@ void FlowEngine::OnKeyboardEvent(WPARAM wParam, KBDLLHOOKSTRUCT* keyStruct) {
     event.virtualKeyCode = keyStruct->vkCode;
     event.scanCode = keyStruct->scanCode;
     event.flags = keyStruct->flags;
-    event.timestamp = RecordingElapsedMs();
+    event.timestampUs = RecordingElapsedUs();
 
     switch (wParam) {
         case WM_KEYDOWN:
@@ -525,7 +526,7 @@ void FlowEngine::PlaybackThreadFunction() {
     while ((maxLoops == -1 || currentLoop < maxLoops) && !shouldStopPlayback.load()) {
         currentLoopIteration.store(currentLoop + 1);
         HighResTimer timer;
-        DWORD lastEventTime = 0;
+        ULONGLONG lastEventTime = 0;
         // Each event is due at a point on one clock for the whole loop, the sum
         // of the gaps before it. Waiting each gap out from "now" instead let
         // the time spent sending input add up, so a long macro ran late, and
@@ -535,12 +536,15 @@ void FlowEngine::PlaybackThreadFunction() {
         for (size_t i = 0; i < eventsCopy.size() && !shouldStopPlayback.load(); ++i) {
             const InputEvent& event = eventsCopy[i];
 
-            const DWORD gap = event.timestamp - lastEventTime;
-            lastEventTime = event.timestamp;
+            const ULONGLONG gap = event.timestampUs - lastEventTime;
+            lastEventTime = event.timestampUs;
 
             if (gap > 0) {
                 double gapUs = ScaleGapUs(gap, playbackSpeed.load());
-                if (humanizationEnabled.load()) {
+                // Jitter only gaps of a millisecond or more, as before the
+                // stamps were finer: events inside one millisecond are one
+                // gesture, and spreading them out would slow it down.
+                if (humanizationEnabled.load() && gap >= 1000) {
                     gapUs = std::max(1000.0, gapUs + humanizer.NextVariance() * 1000.0);
                 }
                 dueUs += gapUs;
@@ -729,7 +733,9 @@ bool decodeEvent(const char* in, uint32_t version, InputEvent& event) {
     event.screenCoords.x = get<int32_t>(in);
     event.screenCoords.y = get<int32_t>(in);
     event.virtualKeyCode = get<uint32_t>(in);
-    event.timestamp = get<uint32_t>(in);
+    // Version 1 counted whole milliseconds.
+    event.timestampUs = version == 1 ? static_cast<ULONGLONG>(get<uint32_t>(in)) * 1000
+                                     : get<uint64_t>(in);
     event.scanCode = get<uint32_t>(in);
     event.flags = get<uint32_t>(in);
     event.mouseData = version == 1 ? 0 : get<int32_t>(in);
@@ -750,7 +756,7 @@ bool FlowEngine::SaveMacro(const std::wstring& filename) {
             put<int32_t>(bytes, event.screenCoords.x);
             put<int32_t>(bytes, event.screenCoords.y);
             put<uint32_t>(bytes, event.virtualKeyCode);
-            put<uint32_t>(bytes, event.timestamp);
+            put<uint64_t>(bytes, event.timestampUs);
             put<uint32_t>(bytes, event.scanCode);
             put<uint32_t>(bytes, event.flags);
             put<int32_t>(bytes, event.mouseData);
@@ -806,16 +812,16 @@ bool FlowEngine::LoadMacro(const std::wstring& filename) {
     loaded.reserve(static_cast<size_t>(count));
 
     // Playback subtracts consecutive timestamps, so one that moves backwards
-    // underflows that DWORD into a delay of weeks. Reject the file rather than
+    // underflows into a delay of centuries. Reject the file rather than
     // rewrite it: a long pause is something a recording may legitimately hold,
     // and playback can now be stopped during one.
-    DWORD lastTimestamp = 0;
+    ULONGLONG lastTimestamp = 0;
     for (uint64_t i = 0; i < count; ++i) {
         InputEvent event;
         if (!decodeEvent(in, version, event)) return false;
         in += recordSize;
-        if (event.timestamp < lastTimestamp) return false;
-        lastTimestamp = event.timestamp;
+        if (event.timestampUs < lastTimestamp) return false;
+        lastTimestamp = event.timestampUs;
         loaded.push_back(event);
     }
 
