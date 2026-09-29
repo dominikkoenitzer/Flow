@@ -13,6 +13,7 @@
 #include "Hotkeys.h"
 #include "ui/Buttons.h"
 #include "ui/Dialogs.h"
+#include "ui/Dpi.h"
 #include "ui/Draw.h"
 #include "ui/Theme.h"
 
@@ -605,6 +606,16 @@ void LayoutControls(HWND hwnd) {
         SendDlgItemMessageW(hwnd, id, WM_SETFONT, (WPARAM)g_fonts.mono, TRUE);
 }
 
+// Rebuild everything sized for a DPI: g_scale, the fonts and the layout. The
+// controls get the new fonts before the old ones are deleted.
+void ApplyDpi(HWND hwnd, UINT dpi) {
+    SetScaleFromDpi(dpi);
+    UiFonts old = g_fonts;
+    CreateUiFonts(g_fonts);
+    LayoutControls(hwnd);
+    DeleteUiFonts(old);
+}
+
 void CreateControls(HWND hwnd) {
     HINSTANCE hi = GetModuleHandle(NULL);
 
@@ -674,18 +685,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     icex.dwICC = ICC_STANDARD_CLASSES;
     InitCommonControlsEx(&icex);
 
-    // Determine the DPI scale factor for the primary monitor so the whole UI
-    // scales up on high-DPI displays instead of rendering tiny.
-    {
-        HDC screen = GetDC(NULL);
-        int dpi = GetDeviceCaps(screen, LOGPIXELSX);
-        ReleaseDC(NULL, screen);
-        if (dpi > 0) g_scale = dpi / 96.0;
-        if (g_scale < 1.0) g_scale = 1.0;
-    }
-
-    CreateUiFonts(g_fonts);
-
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(WNDCLASSEXW);
     wc.style = CS_HREDRAW | CS_VREDRAW;
@@ -707,34 +706,44 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     LoadSettings();
 
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
-    RECT wr = { 0, 0, Sc(CLIENT_W), Sc(CLIENT_H) };
-    // Use the DPI-aware frame calculation when available so the client area is
-    // exactly the size we lay out for (AdjustWindowRect uses 96-DPI metrics).
-    typedef BOOL(WINAPI* AdjustForDpiFunc)(LPRECT, DWORD, BOOL, DWORD, UINT);
-    HMODULE u32 = LoadLibraryA("user32.dll");
-    AdjustForDpiFunc adjustForDpi = u32 ?
-        (AdjustForDpiFunc)(void*)GetProcAddress(u32, "AdjustWindowRectExForDpi") : nullptr;
-    if (adjustForDpi) adjustForDpi(&wr, style, FALSE, 0, (UINT)(96 * g_scale + 0.5));
-    else              AdjustWindowRect(&wr, style, FALSE);
-    if (u32) FreeLibrary(u32);
-    int winW = wr.right - wr.left;
-    int winH = wr.bottom - wr.top;
+    int posX = 0, posY = 0, winW = 0, winH = 0;
 
-    // Restore the saved window position, clamped to the visible desktop so it can
-    // never be stranded off-screen; otherwise center on the primary monitor.
-    int posX = (GetSystemMetrics(SM_CXSCREEN) - winW) / 2;
-    int posY = (GetSystemMetrics(SM_CYSCREEN) - winH) / 2;
-    if (g_app.hasWinPos) {
-        int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-        posX = g_app.winX; posY = g_app.winY;
-        if (posX < vx) posX = vx;
-        if (posY < vy) posY = vy;
-        if (posX > vx + vw - winW) posX = vx + vw - winW;
-        if (posY > vy + vh - winH) posY = vy + vh - winH;
+    // Size the frame for a DPI with the DPI-aware frame calculation, so the
+    // client area is exactly the size we lay out for. Then restore the saved
+    // window position, clamped to the visible desktop so it can never be
+    // stranded off-screen; otherwise center on the primary monitor.
+    auto planWindow = [&](UINT dpi) {
+        SIZE ws = WindowSizeForClient(ScAt(CLIENT_W, dpi), ScAt(CLIENT_H, dpi), style, 0, dpi);
+        winW = ws.cx;
+        winH = ws.cy;
+        posX = (GetSystemMetrics(SM_CXSCREEN) - winW) / 2;
+        posY = (GetSystemMetrics(SM_CYSCREEN) - winH) / 2;
+        if (g_app.hasWinPos) {
+            int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+            posX = g_app.winX; posY = g_app.winY;
+            if (posX < vx) posX = vx;
+            if (posY < vy) posY = vy;
+            if (posX > vx + vw - winW) posX = vx + vw - winW;
+            if (posY > vy + vh - winH) posY = vy + vh - winH;
+        }
+    };
+
+    // Lay out for the monitor the window opens on, not the primary one: plan
+    // at the system DPI, look up the monitor that rectangle lands on, and plan
+    // again at that monitor's DPI when it differs.
+    UINT dpi = SystemDpi();
+    planWindow(dpi);
+    RECT planned = { posX, posY, posX + winW, posY + winH };
+    UINT monitorDpi = DpiForRect(planned);
+    if (monitorDpi != dpi) {
+        dpi = monitorDpi;
+        planWindow(dpi);
     }
+    SetScaleFromDpi(dpi);
+    CreateUiFonts(g_fonts);
 
     g_app.hwnd = CreateWindowExW(0, L"FLOW_Modern", L"FLOW",
         style, posX, posY, winW, winH, NULL, NULL, hInstance, NULL);
@@ -742,6 +751,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     if (!g_app.hwnd) {
         MessageBoxW(NULL, L"Window creation failed!", L"Error", MB_OK | MB_ICONERROR);
         return 1;
+    }
+
+    // The window's own DPI has the last word; if Windows placed it on a monitor
+    // with another scale, rebuild for that one and resize to match.
+    UINT windowDpi = DpiForWindow(g_app.hwnd);
+    if (windowDpi != CurrentDpi()) {
+        ApplyDpi(g_app.hwnd, windowDpi);
+        SIZE ws = WindowSizeForClient(Sc(CLIENT_W), Sc(CLIENT_H), style, 0, windowDpi);
+        SetWindowPos(g_app.hwnd, NULL, 0, 0, ws.cx, ws.cy,
+                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
     DragAcceptFiles(g_app.hwnd, TRUE);  // accept .rec files dropped onto the window
 
