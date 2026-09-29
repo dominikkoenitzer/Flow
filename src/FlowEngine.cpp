@@ -224,9 +224,9 @@ void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
 
 void FlowEngine::OnKeyboardEvent(WPARAM wParam, KBDLLHOOKSTRUCT* keyStruct) {
     // Filter out hotkey keys to prevent recording control keys
-    // F6 (auto-clicker toggle), F8 (record toggle), P (with Ctrl+Shift+Alt for playback)
+    // F6 (auto-clicker toggle), F8 (record toggle)
     DWORD vk = keyStruct->vkCode;
-    if (vk == VK_F6 || vk == VK_F8 || vk == 'P') {
+    if (vk == VK_F6 || vk == VK_F8) {
         return; // Don't record control hotkeys
     }
 
