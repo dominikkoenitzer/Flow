@@ -199,6 +199,7 @@ private:
     std::mutex recordMutex;                  ///< Recording buffer protection
     DWORD recordingStartTime;                ///< Recording session start time
     std::atomic<DWORD> controlKeys[4];       ///< FLOW's own hotkeys, never recorded
+    bool skippedPress[3];                    ///< Left/right/middle press on FLOW left out, so its release is too
 
     // ===== Auto-Clicker System =====
     std::atomic<bool> isClicking;            ///< Clicker active flag
