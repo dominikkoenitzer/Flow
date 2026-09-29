@@ -271,8 +271,39 @@ void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
         case WM_MBUTTONUP:
             event.type = InputEvent::Type::MOUSE_MIDDLE_UP;
             break;
+        case WM_MOUSEWHEEL:
+        case WM_MOUSEHWHEEL:
+            // The high word of mouseData is the signed delta: positive is away
+            // from the user, or to the right for a tilt. Kept as recorded, so a
+            // high-resolution wheel's small steps replay as small steps.
+            event.type = wParam == WM_MOUSEWHEEL ? InputEvent::Type::MOUSE_WHEEL
+                                                 : InputEvent::Type::MOUSE_HWHEEL;
+            event.mouseData = static_cast<SHORT>(HIWORD(mouseStruct->mouseData));
+            break;
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP: {
+            // The high word says which side button; anything else is not one
+            // SendInput can replay.
+            const WORD which = HIWORD(mouseStruct->mouseData);
+            const bool down = wParam == WM_XBUTTONDOWN;
+            if (which == XBUTTON1) {
+                event.type = down ? InputEvent::Type::MOUSE_X1_DOWN : InputEvent::Type::MOUSE_X1_UP;
+            } else if (which == XBUTTON2) {
+                event.type = down ? InputEvent::Type::MOUSE_X2_DOWN : InputEvent::Type::MOUSE_X2_UP;
+            } else {
+                return;
+            }
+            break;
+        }
         default:
             return;
+    }
+
+    // A wheel turned over FLOW's own window is the user driving FLOW, the same
+    // as a click there, below.
+    if ((event.type == InputEvent::Type::MOUSE_WHEEL || event.type == InputEvent::Type::MOUSE_HWHEEL)
+        && IsOwnWindowAt(mouseStruct->pt)) {
+        return;
     }
 
     // A click on one of FLOW's own windows is the user driving FLOW, not part
@@ -288,6 +319,10 @@ void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
         case InputEvent::Type::MOUSE_RIGHT_UP:    button = 1; break;
         case InputEvent::Type::MOUSE_MIDDLE_DOWN: button = 2; press = true; break;
         case InputEvent::Type::MOUSE_MIDDLE_UP:   button = 2; break;
+        case InputEvent::Type::MOUSE_X1_DOWN:     button = 3; press = true; break;
+        case InputEvent::Type::MOUSE_X1_UP:       button = 3; break;
+        case InputEvent::Type::MOUSE_X2_DOWN:     button = 4; press = true; break;
+        case InputEvent::Type::MOUSE_X2_UP:       button = 4; break;
         default: break;
     }
     if (button >= 0) {
@@ -483,7 +518,7 @@ void FlowEngine::PlaybackThreadFunction() {
 
     // What this run has pressed and not yet released. A stop part way through
     // the macro would otherwise leave those keys and buttons held down.
-    bool buttonHeld[3] = {};                 // left, right, middle
+    bool buttonHeld[5] = {};                 // left, right, middle, X1, X2
     struct HeldKey { bool held; WORD scan; bool extended; };
     HeldKey keyHeld[256] = {};
 
@@ -581,6 +616,32 @@ void FlowEngine::PlaybackThreadFunction() {
                     buttonHeld[2] = false;
                     break;
 
+                case InputEvent::Type::MOUSE_WHEEL:
+                case InputEvent::Type::MOUSE_HWHEEL:
+                    input.type = INPUT_MOUSE;
+                    input.mi.dwFlags = event.type == InputEvent::Type::MOUSE_WHEEL
+                                           ? MOUSEEVENTF_WHEEL : MOUSEEVENTF_HWHEEL;
+                    // mouseData is a DWORD, but a wheel delta in it is signed.
+                    input.mi.mouseData = static_cast<DWORD>(event.mouseData);
+                    SendInput(1, &input, sizeof(INPUT));
+                    break;
+
+                case InputEvent::Type::MOUSE_X1_DOWN:
+                case InputEvent::Type::MOUSE_X1_UP:
+                case InputEvent::Type::MOUSE_X2_DOWN:
+                case InputEvent::Type::MOUSE_X2_UP: {
+                    const bool first = event.type == InputEvent::Type::MOUSE_X1_DOWN
+                                    || event.type == InputEvent::Type::MOUSE_X1_UP;
+                    const bool down = event.type == InputEvent::Type::MOUSE_X1_DOWN
+                                   || event.type == InputEvent::Type::MOUSE_X2_DOWN;
+                    input.type = INPUT_MOUSE;
+                    input.mi.dwFlags = down ? MOUSEEVENTF_XDOWN : MOUSEEVENTF_XUP;
+                    input.mi.mouseData = first ? XBUTTON1 : XBUTTON2;
+                    SendInput(1, &input, sizeof(INPUT));
+                    buttonHeld[first ? 3 : 4] = down;
+                    break;
+                }
+
                 case InputEvent::Type::KEY_DOWN:
                     input.type = INPUT_KEYBOARD;
                     input.ki.wVk = static_cast<WORD>(event.virtualKeyCode);
@@ -613,12 +674,15 @@ void FlowEngine::PlaybackThreadFunction() {
     }
 
     // Release whatever is still held, in whatever way the run ended.
-    const DWORD buttonUp[3] = { MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEUP };
-    for (int b = 0; b < 3; ++b) {
+    const DWORD buttonUp[5] = { MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEUP,
+                                MOUSEEVENTF_XUP, MOUSEEVENTF_XUP };
+    const DWORD buttonData[5] = { 0, 0, 0, XBUTTON1, XBUTTON2 };
+    for (int b = 0; b < 5; ++b) {
         if (!buttonHeld[b]) continue;
         INPUT input = {};
         input.type = INPUT_MOUSE;
         input.mi.dwFlags = buttonUp[b];
+        input.mi.mouseData = buttonData[b];
         SendInput(1, &input, sizeof(INPUT));
     }
     for (WORD vk = 0; vk < 256; ++vk) {
@@ -641,7 +705,7 @@ namespace {
 
 // The highest InputEvent::Type each format version can hold.
 constexpr uint32_t LAST_TYPE_V1 = static_cast<uint32_t>(InputEvent::Type::KEY_UP);
-constexpr uint32_t LAST_TYPE_V2 = static_cast<uint32_t>(InputEvent::Type::KEY_UP);
+constexpr uint32_t LAST_TYPE_V2 = static_cast<uint32_t>(InputEvent::Type::MOUSE_X2_UP);
 
 template <typename T>
 void put(std::string& out, T value) {
