@@ -17,6 +17,12 @@ void RegisterHotkeys() {
     RegisterHotKey(g_app.hwnd, HOTKEY_PLAYBACK, g_app.hotkeyModifiers, g_app.hotkeyPlayback);
     RegisterHotKey(g_app.hwnd, HOTKEY_CLICKER, 0, g_app.hotkeyClicker);
     RegisterHotKey(g_app.hwnd, HOTKEY_STOP, 0, g_app.hotkeyStop);
+
+    // Keep the recorder's filter in step with the keys just registered.
+    if (g_app.engine) {
+        g_app.engine->SetControlKeys(g_app.hotkeyRecord, g_app.hotkeyPlayback,
+                                     g_app.hotkeyClicker, g_app.hotkeyStop);
+    }
 }
 
 void UnregisterHotkeys() {

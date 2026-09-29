@@ -198,6 +198,7 @@ private:
     std::atomic<bool> isRecording;           ///< Recording active flag
     std::mutex recordMutex;                  ///< Recording buffer protection
     DWORD recordingStartTime;                ///< Recording session start time
+    std::atomic<DWORD> controlKeys[4];       ///< FLOW's own hotkeys, never recorded
 
     // ===== Auto-Clicker System =====
     std::atomic<bool> isClicking;            ///< Clicker active flag
@@ -317,6 +318,18 @@ public:
      * @brief Clear all recorded events
      */
     void ClearRecording();
+
+    /**
+     * @brief Tell the recorder which keys drive FLOW, so they are left out
+     * @param record Virtual-key code of the record hotkey
+     * @param playback Virtual-key code of the playback hotkey
+     * @param clicker Virtual-key code of the auto-clicker hotkey
+     * @param stop Virtual-key code of the stop-all hotkey
+     * @note Call again whenever the hotkeys change. Replaying one of these keys
+     *       would fire the hotkey itself, e.g. the stop key ending a loop.
+     */
+    void SetControlKeys(DWORD record, DWORD playback, DWORD clicker, DWORD stop);
+
     bool HasRecordedEvents() const { return !recordedEvents.empty(); }
 
     /**
