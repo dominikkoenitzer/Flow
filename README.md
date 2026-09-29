@@ -131,7 +131,7 @@ git tag -f flow
 git push -f origin flow
 ```
 
-The release updates automatically once CI passes (the build is verified self-contained before anything is published).
+Pushing the tag updates the release by itself, without waiting for CI; the release workflow builds its own binary and publishes only once it has verified that binary is self-contained.
 
 To build the release artifacts locally without GitHub, run [`scripts/package.ps1`](scripts/package.ps1).
 
