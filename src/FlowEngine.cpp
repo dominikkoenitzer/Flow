@@ -73,6 +73,13 @@ void HighResTimer::PreciseDelayMs(DWORD milliseconds, const std::atomic<bool>* c
     } while (now.QuadPart < target);
 }
 
+DWORD TicksToMs(LONGLONG startTicks, LONGLONG nowTicks, LONGLONG frequency) {
+    if (frequency <= 0 || nowTicks <= startTicks) return 0;
+    const LONGLONG delta = nowTicks - startTicks;
+    const LONGLONG ms = (delta / frequency) * 1000 + ((delta % frequency) * 1000) / frequency;
+    return ms > static_cast<LONGLONG>(MAXDWORD) ? MAXDWORD : static_cast<DWORD>(ms);
+}
+
 // ---- HumanizationEngine ----
 
 // std::normal_distribution requires a strictly positive standard deviation --
@@ -104,11 +111,16 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
 // ---- construction and teardown ----
 
 FlowEngine::FlowEngine()
-    : isRecording(false), recordingStartTime(0),
+    : isRecording(false), recordingStartTicks(0), counterFrequency(0),
       // The default hotkeys (see AppState) until SetControlKeys brings the user's.
       controlKeys{ {VK_F8}, {VK_F9}, {VK_F6}, {VK_PAUSE} }, skippedPress{}, isClicking(false),
       clickInterval(DEFAULT_CLICK_INTERVAL), isPlaying(false), shouldStopPlayback(false),
       loopCount(1), currentLoopIteration(0), playbackSpeed(1.0), humanizationEnabled(true) {
+    LARGE_INTEGER value;
+    QueryPerformanceFrequency(&value);
+    counterFrequency = value.QuadPart;
+    QueryPerformanceCounter(&value);
+    recordingStartTicks = value.QuadPart;
     instance = this;
 }
 
@@ -188,6 +200,15 @@ LRESULT CALLBACK FlowEngine::KeyboardHookProc(int nCode, WPARAM wParam, LPARAM l
 
 // ---- event recording ----
 
+// Recording time comes from the performance counter. GetTickCount only moves
+// every 10 to 16 ms, so events closer together than that were stamped with the
+// same time and a steady mouse drag replayed as bursts.
+DWORD FlowEngine::RecordingElapsedMs() const {
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    return TicksToMs(recordingStartTicks, now.QuadPart, counterFrequency);
+}
+
 // True when the window under a screen point belongs to this process: the main
 // window, its buttons, and the menus and dialogs it opens.
 static bool IsOwnWindowAt(POINT pt) {
@@ -201,7 +222,7 @@ static bool IsOwnWindowAt(POINT pt) {
 void FlowEngine::OnMouseEvent(WPARAM wParam, MSLLHOOKSTRUCT* mouseStruct) {
     InputEvent event;
     event.screenCoords = mouseStruct->pt;
-    event.timestamp = GetTickCount() - recordingStartTime;
+    event.timestamp = RecordingElapsedMs();
     event.flags = mouseStruct->flags;
 
     switch (wParam) {
@@ -272,7 +293,7 @@ void FlowEngine::OnKeyboardEvent(WPARAM wParam, KBDLLHOOKSTRUCT* keyStruct) {
     event.virtualKeyCode = keyStruct->vkCode;
     event.scanCode = keyStruct->scanCode;
     event.flags = keyStruct->flags;
-    event.timestamp = GetTickCount() - recordingStartTime;
+    event.timestamp = RecordingElapsedMs();
 
     switch (wParam) {
         case WM_KEYDOWN:
@@ -303,7 +324,9 @@ void FlowEngine::StartRecording() {
 
     ClearRecording();
     std::fill(std::begin(skippedPress), std::end(skippedPress), false);
-    recordingStartTime = GetTickCount();
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    recordingStartTicks = now.QuadPart;
     isRecording.store(true);
 }
 
@@ -317,6 +340,11 @@ void FlowEngine::StopRecording() {
 void FlowEngine::ClearRecording() {
     std::lock_guard<std::mutex> lock(recordMutex);
     recordedEvents.clear();
+}
+
+std::vector<InputEvent> FlowEngine::GetEvents() {
+    std::lock_guard<std::mutex> lock(recordMutex);
+    return recordedEvents;
 }
 
 void FlowEngine::SetControlKeys(DWORD record, DWORD playback, DWORD clicker, DWORD stop) {

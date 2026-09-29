@@ -110,6 +110,33 @@ TEST_CASE("Mouse and keyboard events are captured") {
     CHECK(engine.HasRecordedEvents());
 }
 
+TEST_CASE("Events are stamped finer than the 16 ms system tick") {
+    // GetTickCount moves in 10 to 16 ms steps, so events a few milliseconds
+    // apart used to share one timestamp. Each gap here has to show up.
+    FlowEngine engine;
+    pushMouse(engine, WM_MOUSEMOVE, 0, 0);
+    for (int i = 1; i <= 4; ++i) {
+        flow::HighResTimer::PreciseDelayMs(3);
+        pushMouse(engine, WM_MOUSEMOVE, i, i);
+    }
+
+    const auto events = engine.GetEvents();
+    REQUIRE(events.size() == 5);
+    for (size_t i = 1; i < events.size(); ++i) {
+        // Lower bound only: each stamp is rounded down, so a 3 ms wait can read
+        // as 2 ms, and a descheduled runner can only make a gap longer.
+        CHECK(events[i].timestamp - events[i - 1].timestamp >= 2);
+    }
+}
+
+TEST_CASE("Timestamps count from the start of the recording") {
+    FlowEngine engine;
+    flow::HighResTimer::PreciseDelayMs(20);
+    pushKey(engine, WM_KEYDOWN, 'A');
+    CHECK(engine.GetDurationMs() >= 19);
+    CHECK(engine.GetDurationMs() < 60000);  // not the machine's uptime
+}
+
 TEST_CASE("Unrecognised window messages are ignored") {
     FlowEngine engine;
     pushMouse(engine, WM_MOUSEWHEEL, 10, 10);  // the wheel is not a captured type
