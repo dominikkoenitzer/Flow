@@ -650,21 +650,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         if (g_scale < 1.0) g_scale = 1.0;
     }
 
-    auto mkFont = [](int h, int weight, bool italic = false) -> HFONT {
-        return CreateFontW(h, 0, 0, 0, weight, italic, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    };
-    g_fonts.wordmark  = mkFont(Sc(22), FW_BOLD);
-    g_fonts.cardTitle = mkFont(Sc(12), FW_BOLD);   // small tracked section labels
-    g_fonts.button    = mkFont(Sc(17), FW_SEMIBOLD);
-    g_fonts.body      = mkFont(Sc(16), FW_NORMAL);
-    g_fonts.value     = mkFont(Sc(17), FW_SEMIBOLD);
-    g_fonts.pill      = mkFont(Sc(15), FW_SEMIBOLD);
-    g_fonts.small_    = mkFont(Sc(14), FW_NORMAL);
-    g_fonts.mono      = CreateFontW(Sc(17), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
+    CreateUiFonts(g_fonts);
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(WNDCLASSEXW);
@@ -770,14 +756,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_app.engine->UninstallHooks();
     delete g_app.engine;
 
-    DeleteObject(g_fonts.wordmark);
-    DeleteObject(g_fonts.cardTitle);
-    DeleteObject(g_fonts.button);
-    DeleteObject(g_fonts.body);
-    DeleteObject(g_fonts.value);
-    DeleteObject(g_fonts.pill);
-    DeleteObject(g_fonts.small_);
-    DeleteObject(g_fonts.mono);
+    DeleteUiFonts(g_fonts);
     Gdiplus::GdiplusShutdown(gdiplusToken);
 
     return (int)msg.wParam;
