@@ -26,9 +26,56 @@ namespace flow::ui {
 #define IDC_HOTKEY_OK 1010
 #define IDC_HOTKEY_CANCEL 1011
 
-// Static IDs used only for muted-text coloring in the hotkey dialog
+// Static IDs in the hotkey dialog, for layout and muted-text coloring
 #define IDC_HK_SUBTITLE 9001
 #define IDC_HK_INSTRUCTION 9002
+#define IDC_HK_TITLE 9003
+#define IDC_HK_LABEL_RECORD 9004
+#define IDC_HK_LABEL_PLAYBACK 9005
+#define IDC_HK_LABEL_CLICKER 9006
+#define IDC_HK_LABEL_STOP 9007
+
+// Places a control at design units through Sc(), and optionally sets its font.
+struct DlgPlace { int id, x, y, w, h; HFONT font; };
+
+static void PlaceControls(HWND hDlg, const DlgPlace* places, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        const DlgPlace& p = places[i];
+        HWND c = GetDlgItem(hDlg, p.id);
+        if (!c) continue;
+        SetWindowPos(c, NULL, Sc(p.x), Sc(p.y), Sc(p.w), Sc(p.h),
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        if (p.font) SendMessageW(c, WM_SETFONT, (WPARAM)p.font, TRUE);
+    }
+}
+
+// Hotkey dialog layout, in design units (scaled via Sc).
+static const int HK_W = 460, HK_H = 446, HK_PAD = 28;
+static const int HK_ROW_TOP = 104, HK_ROW_H = 54, HK_EDIT_W = 150, HK_EDIT_H = 38;
+static const int HK_EDIT_X = HK_W - HK_PAD - HK_EDIT_W;   // right-aligned key fields
+static const int HK_BTN_Y = 384, HK_BTN_H = 44;
+
+// Place every control in the hotkey dialog at the current g_scale and fonts.
+static void LayoutHotkeyDialog(HWND hDlg) {
+    const int textW = HK_W - 2 * HK_PAD;
+    const int labelW = HK_EDIT_X - HK_PAD;
+    const DlgPlace places[] = {
+        { IDC_HK_TITLE,       HK_PAD, 20, textW, 36, g_fonts.wordmark },
+        { IDC_HK_SUBTITLE,    HK_PAD, 62, textW, 24, g_fonts.small_ },
+        { IDC_HK_LABEL_RECORD,   HK_PAD, HK_ROW_TOP + 10,                labelW, 24, g_fonts.body },
+        { IDC_HK_LABEL_PLAYBACK, HK_PAD, HK_ROW_TOP + HK_ROW_H + 10,     labelW, 24, g_fonts.body },
+        { IDC_HK_LABEL_CLICKER,  HK_PAD, HK_ROW_TOP + 2 * HK_ROW_H + 10, labelW, 24, g_fonts.body },
+        { IDC_HK_LABEL_STOP,     HK_PAD, HK_ROW_TOP + 3 * HK_ROW_H + 10, labelW, 24, g_fonts.body },
+        { IDC_HOTKEY_RECORD,   HK_EDIT_X, HK_ROW_TOP,                HK_EDIT_W, HK_EDIT_H, nullptr },
+        { IDC_HOTKEY_PLAYBACK, HK_EDIT_X, HK_ROW_TOP + HK_ROW_H,     HK_EDIT_W, HK_EDIT_H, nullptr },
+        { IDC_HOTKEY_CLICKER,  HK_EDIT_X, HK_ROW_TOP + 2 * HK_ROW_H, HK_EDIT_W, HK_EDIT_H, nullptr },
+        { IDC_HOTKEY_STOP,     HK_EDIT_X, HK_ROW_TOP + 3 * HK_ROW_H, HK_EDIT_W, HK_EDIT_H, nullptr },
+        { IDC_HK_INSTRUCTION, HK_PAD, HK_ROW_TOP + 4 * HK_ROW_H + 4, textW, 24, g_fonts.small_ },
+        { IDC_HOTKEY_OK,     HK_W - HK_PAD - 270, HK_BTN_Y, 150, HK_BTN_H, nullptr },
+        { IDC_HOTKEY_CANCEL, HK_W - HK_PAD - 110, HK_BTN_Y, 110, HK_BTN_H, nullptr },
+    };
+    PlaceControls(hDlg, places, sizeof(places) / sizeof(places[0]));
+}
 
 // Every dialog shares window class #32770, so the themed background is a
 // class-wide patch: while one of ours is open, anything else on that class
@@ -216,60 +263,49 @@ void ShowCustomizeHotkeysDialog(HWND hwnd) {
     HINSTANCE hi = GetModuleHandle(NULL);
     PatchDialogClassBrush(hDlg);
 
-    // Layout in design units (scaled via Sc).
-    const int W = 460, H = 446, padX = 28;
-    const int rowTop = 104, rowH = 54, editW = 150, editH = 38;
-    const int editX = W - padX - editW;   // right-aligned key fields
-
-    HWND title = CreateWindowExW(0, L"STATIC", L"Customize Hotkeys",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(20), Sc(W - 2 * padX), Sc(36),
-        hDlg, NULL, hi, NULL);
-    SendMessageW(title, WM_SETFONT, (WPARAM)g_fonts.wordmark, TRUE);
-
-    HWND sub = CreateWindowExW(0, L"STATIC",
-        L"Click a field, then press a key to rebind it.",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(62), Sc(W - 2 * padX), Sc(24),
-        hDlg, (HMENU)IDC_HK_SUBTITLE, hi, NULL);
-    SendMessageW(sub, WM_SETFONT, (WPARAM)g_fonts.small_, TRUE);
-
-    auto makeRow = [&](const wchar_t* text, int editId, int y) -> HWND {
-        HWND lab = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT,
-            Sc(padX), Sc(y + 10), Sc(editX - padX), Sc(24), hDlg, NULL, hi, NULL);
-        SendMessageW(lab, WM_SETFONT, (WPARAM)g_fonts.body, TRUE);
+    auto makeStatic = [&](int id, const wchar_t* text) {
+        CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT,
+            0, 0, 0, 0, hDlg, (HMENU)(LONG_PTR)id, hi, NULL);
+    };
+    auto makeKeyField = [&](int id) -> HWND {
         HWND e = CreateWindowExW(0, L"BUTTON", L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
-            Sc(editX), Sc(y), Sc(editW), Sc(editH), hDlg, (HMENU)(LONG_PTR)editId, hi, NULL);
+            0, 0, 0, 0, hDlg, (HMENU)(LONG_PTR)id, hi, NULL);
         SetWindowSubclass(e, HotkeyEditProc, 0, 0);
         return e;
     };
 
-    g_hHotkeyRecordEdit   = makeRow(L"Start / stop recording", IDC_HOTKEY_RECORD,   rowTop);
-    g_hHotkeyPlaybackEdit = makeRow(L"Start / stop playback",  IDC_HOTKEY_PLAYBACK, rowTop + rowH);
-    g_hHotkeyClickerEdit  = makeRow(L"Toggle auto-clicker",    IDC_HOTKEY_CLICKER,  rowTop + 2 * rowH);
-    g_hHotkeyStopEdit     = makeRow(L"Stop all activities",    IDC_HOTKEY_STOP,     rowTop + 3 * rowH);
+    makeStatic(IDC_HK_TITLE, L"Customize Hotkeys");
+    makeStatic(IDC_HK_SUBTITLE, L"Click a field, then press a key to rebind it.");
 
-    HWND instr = CreateWindowExW(0, L"STATIC",
-        L"Supported keys: F1–F12, A–Z, 0–9.   Changes apply on Save.",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, Sc(padX), Sc(rowTop + 4 * rowH + 4), Sc(W - 2 * padX), Sc(24),
-        hDlg, (HMENU)IDC_HK_INSTRUCTION, hi, NULL);
-    SendMessageW(instr, WM_SETFONT, (WPARAM)g_fonts.small_, TRUE);
+    makeStatic(IDC_HK_LABEL_RECORD,   L"Start / stop recording");
+    g_hHotkeyRecordEdit   = makeKeyField(IDC_HOTKEY_RECORD);
+    makeStatic(IDC_HK_LABEL_PLAYBACK, L"Start / stop playback");
+    g_hHotkeyPlaybackEdit = makeKeyField(IDC_HOTKEY_PLAYBACK);
+    makeStatic(IDC_HK_LABEL_CLICKER,  L"Toggle auto-clicker");
+    g_hHotkeyClickerEdit  = makeKeyField(IDC_HOTKEY_CLICKER);
+    makeStatic(IDC_HK_LABEL_STOP,     L"Stop all activities");
+    g_hHotkeyStopEdit     = makeKeyField(IDC_HOTKEY_STOP);
 
-    const int btnY = 384, btnH = 44;
-    HWND ok = CreateWindowExW(0, L"BUTTON", L"",
+    makeStatic(IDC_HK_INSTRUCTION,
+        L"Supported keys: F1–F12, A–Z, 0–9.   Changes apply on Save.");
+
+    CreateWindowExW(0, L"BUTTON", L"",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW | BS_DEFPUSHBUTTON,
-        Sc(W - padX - 270), Sc(btnY), Sc(150), Sc(btnH), hDlg, (HMENU)IDC_HOTKEY_OK, hi, NULL);
-    HWND cancel = CreateWindowExW(0, L"BUTTON", L"",
+        0, 0, 0, 0, hDlg, (HMENU)IDC_HOTKEY_OK, hi, NULL);
+    CreateWindowExW(0, L"BUTTON", L"",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
-        Sc(W - padX - 110), Sc(btnY), Sc(110), Sc(btnH), hDlg, (HMENU)IDC_HOTKEY_CANCEL, hi, NULL);
-    (void)ok; (void)cancel;
+        0, 0, 0, 0, hDlg, (HMENU)IDC_HOTKEY_CANCEL, hi, NULL);
 
-    // Size the client area to exactly Sc(W) x Sc(H)
-    SetWindowPos(hDlg, NULL, 0, 0, Sc(W), Sc(H), SWP_NOMOVE | SWP_NOZORDER);
+    LayoutHotkeyDialog(hDlg);
+
+    // Size the client area to exactly Sc(HK_W) x Sc(HK_H)
+    SetWindowPos(hDlg, NULL, 0, 0, Sc(HK_W), Sc(HK_H), SWP_NOMOVE | SWP_NOZORDER);
     RECT rcC; GetClientRect(hDlg, &rcC);
     RECT rcW; GetWindowRect(hDlg, &rcW);
     SetWindowPos(hDlg, NULL, 0, 0,
-        (rcW.right - rcW.left) + (Sc(W) - rcC.right),
-        (rcW.bottom - rcW.top) + (Sc(H) - rcC.bottom),
+        (rcW.right - rcW.left) + (Sc(HK_W) - rcC.right),
+        (rcW.bottom - rcW.top) + (Sc(HK_H) - rcC.bottom),
         SWP_NOMOVE | SWP_NOZORDER);
 
     // Center on parent
