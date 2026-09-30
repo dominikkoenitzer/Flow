@@ -969,8 +969,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         SIZE ws = WindowSizeForClient(ScAt(CLIENT_W, dpi), ScAt(CLIENT_H, dpi), style, 0, dpi);
         winW = ws.cx;
         winH = ws.cy;
-        posX = (GetSystemMetrics(SM_CXSCREEN) - winW) / 2;
-        posY = (GetSystemMetrics(SM_CYSCREEN) - winH) / 2;
+        // Centre in the primary monitor's work area, not the whole screen: at
+        // 125% on a 1080p screen the window is nearly as tall as the space
+        // above the taskbar, and centring on the screen puts its foot under it.
+        RECT work = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+        posX = work.left + (work.right - work.left - winW) / 2;
+        posY = work.top + (work.bottom - work.top - winH) / 2;
+        if (posY < work.top) posY = work.top;   // taller than the work area: keep the caption on screen
         if (g_app.hasWinPos) {
             int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
             int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
