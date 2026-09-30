@@ -145,7 +145,7 @@ FlowEngine::FlowEngine()
     : isRecording(false), recordingStartTicks(0), counterFrequency(0),
       // The default hotkeys (see AppState) until SetControlKeys brings the user's.
       controlKeys{ {VK_F8}, {VK_F9}, {VK_F6}, {VK_PAUSE} }, skippedPress{}, isClicking(false),
-      clickInterval(DEFAULT_CLICK_INTERVAL), isPlaying(false), shouldStopPlayback(false),
+      stopClicking(false), clickInterval(DEFAULT_CLICK_INTERVAL), isPlaying(false), shouldStopPlayback(false),
       loopCount(1), currentLoopIteration(0), playbackSpeed(1.0), humanizationEnabled(true) {
     LARGE_INTEGER value;
     QueryPerformanceFrequency(&value);
@@ -423,28 +423,40 @@ void FlowEngine::SetControlKeys(DWORD record, DWORD playback, DWORD clicker, DWO
 
 // ---- auto-clicker ----
 
+// isClicking says whether the thread is running; stopClicking is the request to
+// end it. With one flag for both, a thread that ended by itself left isClicking
+// false while still joinable: Stop skipped the join, and the next Start assigned
+// over a joinable std::thread, which terminates the process. The mutex keeps a
+// start and a stop from the UI and the hotkey thread from interleaving.
 void FlowEngine::StartAutoClicker(DWORD intervalMs) {
+    std::lock_guard<std::mutex> lock(clickerMutex);
     if (isClicking.load()) return;
 
+    // A thread that has ended by itself is finished but still joinable.
+    if (clickerThread.joinable()) {
+        clickerThread.join();
+    }
+
     clickInterval.store(intervalMs);
+    stopClicking.store(false);
     isClicking.store(true);
 
     clickerThread = std::thread(&FlowEngine::ClickerThreadFunction, this);
 }
 
 void FlowEngine::StopAutoClicker() {
-    if (!isClicking.load()) return;
-
-    isClicking.store(false);
+    std::lock_guard<std::mutex> lock(clickerMutex);
+    stopClicking.store(true);
     if (clickerThread.joinable()) {
         clickerThread.join();
     }
+    isClicking.store(false);
 }
 
 void FlowEngine::ClickerThreadFunction() {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
-    while (isClicking.load()) {
+    while (!stopClicking.load()) {
         POINT cursorPos;
         GetCursorPos(&cursorPos);
 
@@ -468,9 +480,12 @@ void FlowEngine::ClickerThreadFunction() {
             delay = humanizer.AddVariance(delay);
         }
 
-        // Wait the click interval (sub-ms accurate, releases the CPU).
-        HighResTimer::PreciseDelayMs(delay);
+        // Wait the click interval (sub-ms accurate, releases the CPU). A stop
+        // ends the wait, so a long interval does not hold the stop up.
+        HighResTimer::PreciseDelayMs(delay, &stopClicking);
     }
+
+    isClicking.store(false);
 }
 
 // ---- macro playback ----
