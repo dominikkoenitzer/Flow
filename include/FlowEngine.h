@@ -8,9 +8,8 @@
  * QueryPerformanceCounter, so the gaps between events survive at microsecond
  * resolution instead of being rounded to the system tick.
  *
- * Playback delays and auto-click intervals pass through HumanizationEngine,
- * which adds Gaussian jitter so a run is not a byte-exact repeat of the
- * recording. The engine is touched from the UI thread and from the hook
+ * Playback delays pass through HumanizationEngine, which adds Gaussian jitter
+ * so a run is not a byte-exact repeat of the recording. The engine is touched from the UI thread and from the hook
  * callbacks at the same time, so its shared state is guarded.
  */
 

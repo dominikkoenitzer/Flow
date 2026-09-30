@@ -474,11 +474,8 @@ void FlowEngine::ClickerThreadFunction() {
         input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
         SendInput(1, &input, sizeof(INPUT));
 
-        // Calculate delay with optional humanization
-        DWORD delay = clickInterval.load();
-        if (humanizationEnabled.load()) {
-            delay = humanizer.AddVariance(delay);
-        }
+        // The Humanize switch belongs to playback and leaves this interval alone.
+        const DWORD delay = clickInterval.load();
 
         // Wait the click interval (sub-ms accurate, releases the CPU). A stop
         // ends the wait, so a long interval does not hold the stop up.
