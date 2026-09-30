@@ -76,6 +76,13 @@ struct AppState {
     FlowEngine* engine = nullptr;
     float playbackSpeed = 1.0f;
     int clickInterval = 100;
+    int clickButton = 0;            // ClickButton: 0 left, 1 right, 2 middle
+    int clickCount = 1;             // clicks per action: 1, 2 or 3
+    int clickJitter = 0;            // ms added to or taken off each interval at random
+    int clickLimit = 0;             // actions before the clicker stops; 0 = until stopped
+    bool clickAtPoint = false;      // click at the picked point instead of the cursor
+    bool hasClickPoint = false;     // whether a point has been picked
+    int clickX = 0, clickY = 0;     // the picked point, in screen pixels
     int loopCount = 1;
     bool continuous = false;
     bool alwaysOnTop = false;

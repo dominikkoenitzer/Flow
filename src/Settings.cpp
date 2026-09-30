@@ -42,6 +42,15 @@ void SaveSettings() {
     if (!f.is_open()) return;
     f << "playbackSpeed=" << g_app.playbackSpeed << "\n";
     f << "clickInterval=" << g_app.clickInterval << "\n";
+    f << "clickButton=" << g_app.clickButton << "\n";
+    f << "clickCount=" << g_app.clickCount << "\n";
+    f << "clickJitter=" << g_app.clickJitter << "\n";
+    f << "clickLimit=" << g_app.clickLimit << "\n";
+    f << "clickAtPoint=" << (g_app.clickAtPoint ? 1 : 0) << "\n";
+    if (g_app.hasClickPoint) {
+        f << "clickX=" << g_app.clickX << "\n";
+        f << "clickY=" << g_app.clickY << "\n";
+    }
     f << "loopCount=" << g_app.loopCount << "\n";
     f << "continuous=" << (g_app.continuous ? 1 : 0) << "\n";
     f << "alwaysOnTop=" << (g_app.alwaysOnTop ? 1 : 0) << "\n";
@@ -81,6 +90,24 @@ void LoadSettings() {
         } else if (key == "clickInterval") {
             int v = atoi(val.c_str());
             if (v >= 1 && v <= 10000) g_app.clickInterval = v;
+        } else if (key == "clickButton") {
+            int v = atoi(val.c_str());
+            if (v >= 0 && v <= 2) g_app.clickButton = v;
+        } else if (key == "clickCount") {
+            int v = atoi(val.c_str());
+            if (v >= 1 && v <= MAX_CLICK_COUNT) g_app.clickCount = v;
+        } else if (key == "clickJitter") {
+            int v = atoi(val.c_str());
+            if (v >= 0 && v <= (int)MAX_CLICK_JITTER) g_app.clickJitter = v;
+        } else if (key == "clickLimit") {
+            int v = atoi(val.c_str());
+            if (v >= 0 && v <= (int)MAX_CLICK_LIMIT) g_app.clickLimit = v;
+        } else if (key == "clickAtPoint") {
+            g_app.clickAtPoint = (atoi(val.c_str()) != 0);
+        } else if (key == "clickX") {
+            g_app.clickX = atoi(val.c_str()); g_app.hasClickPoint = true;
+        } else if (key == "clickY") {
+            g_app.clickY = atoi(val.c_str()); g_app.hasClickPoint = true;
         } else if (key == "loopCount") {
             int v = atoi(val.c_str());
             if (v >= 1 && v <= 999) g_app.loopCount = v;

@@ -174,6 +174,20 @@ void SetPlaybackSpeed(float speed) {
     UpdateStatusDisplay();
 }
 
+// The clicker options as the window holds them. A fixed point counts only once
+// one has been picked.
+static ClickerOptions CurrentClickerOptions() {
+    ClickerOptions options;
+    options.button = (ClickButton)g_app.clickButton;
+    options.count = g_app.clickCount;
+    options.intervalMs = (DWORD)g_app.clickInterval;
+    options.jitterMs = (DWORD)g_app.clickJitter;
+    options.target = (g_app.clickAtPoint && g_app.hasClickPoint) ? ClickTarget::Point : ClickTarget::Cursor;
+    options.point = { g_app.clickX, g_app.clickY };
+    options.limit = (DWORD)g_app.clickLimit;
+    return options;
+}
+
 void ToggleAutoClicker() {
     if (g_app.isClicking) {
         g_app.engine->StopAutoClicker();
@@ -181,9 +195,7 @@ void ToggleAutoClicker() {
         // Force update after stop
         Sleep(50);
     } else {
-        ClickerOptions options;
-        options.intervalMs = (DWORD)g_app.clickInterval;
-        g_app.engine->StartAutoClicker(options);
+        g_app.engine->StartAutoClicker(CurrentClickerOptions());
         g_app.isClicking = true;
     }
     UpdateStatusDisplay();
