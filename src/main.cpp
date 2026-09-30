@@ -336,9 +336,9 @@ static const wchar_t* ClickCountText() {
 }
 
 // Picking the fixed point: press on the Target field and drag to the spot.
-// The field holds the mouse capture while the button is down, so it sees the
-// release wherever it happens. A release over the field itself is a plain
-// click and opens the menu instead.
+// The field is still a button: it takes the focus and the mouse capture on the
+// press, so it sees the release wherever it happens, and a release over it is
+// a plain click that opens the menu. A release anywhere else picks the point.
 static bool g_pickPressed = false;    // left button went down on the Target field
 static bool g_pickDragging = false;   // and the cursor has left the field since
 static POINT g_pickLive = { 0, 0 };   // the cursor while dragging
@@ -383,15 +383,15 @@ static void ShowClickerChoiceMenu(HWND hwnd, int fieldId) {
 LRESULT CALLBACK TargetFieldProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id, DWORD_PTR ref) {
     (void)id; (void)ref;
     switch (m) {
+        // Only a plain press. An owner-draw button answers the second press of
+        // a double click with BN_DOUBLECLICKED and takes no capture for it.
         case WM_LBUTTONDOWN:
-        case WM_LBUTTONDBLCLK:
             g_pickPressed = true;
             g_pickDragging = false;
-            SetCapture(h);
-            return 0;
+            break;
 
         case WM_MOUSEMOVE:
-            if (g_pickPressed) {
+            if (g_pickPressed && GetCapture() == h) {
                 POINT pt; GetCursorPos(&pt);
                 RECT rc; GetWindowRect(h, &rc);
                 if (!PtInRect(&rc, pt)) g_pickDragging = true;
@@ -400,28 +400,25 @@ LRESULT CALLBACK TargetFieldProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id
                     g_pickLive = pt;
                     InvalidateRect(h, NULL, FALSE);
                 }
-                return 0;
             }
             break;
 
         case WM_LBUTTONUP:
             if (g_pickPressed) {
-                const bool picked = g_pickDragging;
+                POINT pt; GetCursorPos(&pt);
+                RECT rc; GetWindowRect(h, &rc);
+                // Dragged out and brought back: the button's own click, not a pick.
+                const bool picked = g_pickDragging && !PtInRect(&rc, pt);
                 g_pickPressed = false;
                 g_pickDragging = false;
-                ReleaseCapture();
                 if (picked) {
-                    POINT pt; GetCursorPos(&pt);
                     g_app.clickX = pt.x;
                     g_app.clickY = pt.y;
                     g_app.hasClickPoint = true;
                     g_app.clickAtPoint = true;
                     PushClickerOptions();
-                    InvalidateRect(h, NULL, FALSE);
-                } else {
-                    ShowClickerChoiceMenu(GetParent(h), BTN_CLICK_TARGET);
                 }
-                return 0;
+                InvalidateRect(h, NULL, FALSE);
             }
             break;
 
@@ -434,6 +431,8 @@ LRESULT CALLBACK TargetFieldProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id
             }
             break;
     }
+    // The button itself still runs: capture, focus, the tooltip, and BN_CLICKED
+    // for a release over it.
     return DefSubclassProc(h, m, w, l);
 }
 
