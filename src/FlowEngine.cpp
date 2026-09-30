@@ -139,13 +139,28 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
     distribution = std::normal_distribution<double>(mean, stddev > 0.0 ? stddev : 1.0);
 }
 
+// One left click where the cursor is.
+static void SendLeftClick() {
+    INPUT input = {};
+    input.type = INPUT_MOUSE;
+    input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+    SendInput(1, &input, sizeof(INPUT));
+
+    Sleep(1);
+
+    ZeroMemory(&input, sizeof(INPUT));
+    input.type = INPUT_MOUSE;
+    input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+    SendInput(1, &input, sizeof(INPUT));
+}
+
 // ---- construction and teardown ----
 
 FlowEngine::FlowEngine()
     : isRecording(false), recordingStartTicks(0), counterFrequency(0),
       // The default hotkeys (see AppState) until SetControlKeys brings the user's.
-      controlKeys{ {VK_F8}, {VK_F9}, {VK_F6}, {VK_PAUSE} }, skippedPress{}, isClicking(false),
-      stopClicking(false), clickInterval(DEFAULT_CLICK_INTERVAL), isPlaying(false), shouldStopPlayback(false),
+      controlKeys{ {VK_F8}, {VK_F9}, {VK_F6}, {VK_PAUSE} }, skippedPress{},
+      clicker(SendLeftClick), isPlaying(false), shouldStopPlayback(false),
       loopCount(1), currentLoopIteration(0), playbackSpeed(1.0), humanizationEnabled(true) {
     LARGE_INTEGER value;
     QueryPerformanceFrequency(&value);
@@ -423,66 +438,67 @@ void FlowEngine::SetControlKeys(DWORD record, DWORD playback, DWORD clicker, DWO
 
 // ---- auto-clicker ----
 
-// isClicking says whether the thread is running; stopClicking is the request to
-// end it. With one flag for both, a thread that ended by itself left isClicking
+AutoClicker::AutoClicker(Sender sendClick)
+    : send(std::move(sendClick)), running(false), stopRequested(false),
+      interval(DEFAULT_CLICK_INTERVAL) {}
+
+AutoClicker::~AutoClicker() {
+    Stop();
+}
+
+// running says whether the thread is running; stopRequested is the request to
+// end it. With one flag for both, a thread that ended by itself left the flag
 // false while still joinable: Stop skipped the join, and the next Start assigned
 // over a joinable std::thread, which terminates the process. The mutex keeps a
 // start and a stop from the UI and the hotkey thread from interleaving.
-void FlowEngine::StartAutoClicker(DWORD intervalMs) {
-    std::lock_guard<std::mutex> lock(clickerMutex);
-    if (isClicking.load()) return;
+void AutoClicker::Start(DWORD intervalMs) {
+    std::lock_guard<std::mutex> lock(lifecycle);
+    if (running.load()) return;
 
     // A thread that has ended by itself is finished but still joinable.
-    if (clickerThread.joinable()) {
-        clickerThread.join();
+    if (worker.joinable()) {
+        worker.join();
     }
 
-    clickInterval.store(intervalMs);
-    stopClicking.store(false);
-    isClicking.store(true);
+    interval.store(intervalMs);
+    stopRequested.store(false);
+    running.store(true);
 
-    clickerThread = std::thread(&FlowEngine::ClickerThreadFunction, this);
+    worker = std::thread(&AutoClicker::Run, this);
 }
 
-void FlowEngine::StopAutoClicker() {
-    std::lock_guard<std::mutex> lock(clickerMutex);
-    stopClicking.store(true);
-    if (clickerThread.joinable()) {
-        clickerThread.join();
+void AutoClicker::Stop() {
+    std::lock_guard<std::mutex> lock(lifecycle);
+    stopRequested.store(true);
+    if (worker.joinable()) {
+        worker.join();
     }
-    isClicking.store(false);
+    running.store(false);
 }
 
-void FlowEngine::ClickerThreadFunction() {
+void AutoClicker::Run() {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
-    while (!stopClicking.load()) {
-        POINT cursorPos;
-        GetCursorPos(&cursorPos);
-
-        // Send left button down
-        INPUT input = {};
-        input.type = INPUT_MOUSE;
-        input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-        SendInput(1, &input, sizeof(INPUT));
-
-        Sleep(1);
-
-        // Send left button up
-        ZeroMemory(&input, sizeof(INPUT));
-        input.type = INPUT_MOUSE;
-        input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-        SendInput(1, &input, sizeof(INPUT));
+    while (!stopRequested.load()) {
+        send();
 
         // The Humanize switch belongs to playback and leaves this interval alone.
-        const DWORD delay = clickInterval.load();
+        const DWORD delay = interval.load();
 
         // Wait the click interval (sub-ms accurate, releases the CPU). A stop
         // ends the wait, so a long interval does not hold the stop up.
-        HighResTimer::PreciseDelayMs(delay, &stopClicking);
+        HighResTimer::PreciseDelayMs(delay, &stopRequested);
     }
 
-    isClicking.store(false);
+    running.store(false);
+}
+
+void FlowEngine::StartAutoClicker(DWORD intervalMs) {
+    clicker.Start(intervalMs);
+}
+
+void FlowEngine::StopAutoClicker() {
+    clicker.Stop();
 }
 
 // ---- macro playback ----

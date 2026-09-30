@@ -256,6 +256,64 @@ public:
  */
 double PlaybackGapUs(ULONGLONG gapUs, double speed, HumanizationEngine* humanizer);
 
+// ---- AutoClicker ----
+
+/**
+ * @class AutoClicker
+ * @brief The clicker thread: when to click, and when to stop
+ *
+ * What a click does is passed in, so the engine gives it SendInput and a test
+ * gives it a counter. Start and Stop may be called from any thread, in any
+ * order and any number of times; every run's thread is joined.
+ */
+class AutoClicker {
+public:
+    /** @brief Sends one click */
+    using Sender = std::function<void()>;
+
+    /** @param send Called on the clicker thread for every click */
+    explicit AutoClicker(Sender send);
+
+    /** @brief Stops and joins the thread */
+    ~AutoClicker();
+
+    AutoClicker(const AutoClicker&) = delete;
+    AutoClicker& operator=(const AutoClicker&) = delete;
+
+    /**
+     * @brief Start clicking
+     * @param intervalMs Wait after each click, in milliseconds
+     * @note Does nothing while a run is active.
+     */
+    void Start(DWORD intervalMs);
+
+    /**
+     * @brief Stop clicking and wait for the thread to end
+     * @note Joins the thread even when it has already ended by itself, so the
+     *       next start never meets a finished thread that was never joined.
+     */
+    void Stop();
+
+    /** @brief True from a start until the thread ends */
+    bool IsActive() const { return running.load(); }
+
+    /** @brief Change the interval, also during a run */
+    void SetInterval(DWORD intervalMs) { interval.store(intervalMs); }
+
+    /** @brief The current interval in milliseconds */
+    DWORD GetInterval() const { return interval.load(); }
+
+private:
+    void Run();
+
+    Sender send;                        ///< What one click does
+    std::atomic<bool> running;          ///< True from a start until the thread ends
+    std::atomic<bool> stopRequested;    ///< Stop signal for the thread
+    std::atomic<DWORD> interval;        ///< Click interval (ms)
+    std::thread worker;                 ///< The clicker thread
+    std::mutex lifecycle;               ///< Serialises Start and Stop
+};
+
 // ---- FlowEngine ----
 
 /**
@@ -291,11 +349,7 @@ private:
     bool skippedPress[5];                    ///< Left/right/middle/X1/X2 press on FLOW left out, so its release is too
 
     // ===== Auto-Clicker System =====
-    std::atomic<bool> isClicking;            ///< True from a start until the thread ends
-    std::atomic<bool> stopClicking;          ///< Stop signal for the clicker thread
-    std::atomic<DWORD> clickInterval;        ///< Click interval (ms)
-    std::thread clickerThread;               ///< Clicker worker thread
-    std::mutex clickerMutex;                 ///< Serialises starting and stopping the clicker
+    AutoClicker clicker;                     ///< Clicker thread, sending real clicks
 
     // ===== Macro Playback System =====
     std::atomic<bool> isPlaying;             ///< Playback active flag
@@ -310,7 +364,6 @@ private:
     std::atomic<bool> humanizationEnabled;   ///< Humanization toggle
 
     // ===== Private Worker Methods =====
-    void ClickerThreadFunction();
     void PlaybackThreadFunction();
     void SendMouseEvent(DWORD flags, POINT coords);
     void SendKeyboardEvent(WORD vkCode, DWORD scanCode, DWORD flags);
@@ -367,8 +420,6 @@ public:
     
     /**
      * @brief Stop the auto-clicker and wait for its thread to end
-     * @note Joins the thread even when it has already ended by itself, so the
-     *       next start never meets a finished thread that was never joined.
      */
     void StopAutoClicker();
     
@@ -376,19 +427,19 @@ public:
      * @brief Check if auto-clicker is currently active
      * @return true if clicking, false otherwise
      */
-    bool IsClickerActive() const { return isClicking.load(); }
-    
+    bool IsClickerActive() const { return clicker.IsActive(); }
+
     /**
      * @brief Set the click interval while clicker is running
      * @param intervalMs New interval in milliseconds
      */
-    void SetClickInterval(DWORD intervalMs) { clickInterval.store(intervalMs); }
-    
+    void SetClickInterval(DWORD intervalMs) { clicker.SetInterval(intervalMs); }
+
     /**
      * @brief Get current click interval
      * @return Click interval in milliseconds
      */
-    DWORD GetClickInterval() const { return clickInterval.load(); }
+    DWORD GetClickInterval() const { return clicker.GetInterval(); }
 
     // ===== Recording Control =====
     
