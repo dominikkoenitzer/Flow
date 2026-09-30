@@ -376,7 +376,7 @@ static void ShowClickerChoiceMenu(HWND hwnd, int fieldId) {
 
     RECT rcField;
     GetWindowRect(GetDlgItem(hwnd, fieldId), &rcField);
-    TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN, rcField.left, rcField.bottom + 4, 0, hwnd, NULL);
+    TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN, rcField.left, rcField.bottom + Sc(4), 0, hwnd, NULL);
     DestroyMenu(hMenu);
 }
 
