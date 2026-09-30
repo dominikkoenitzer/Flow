@@ -511,7 +511,7 @@ void AutoClicker::SetInterval(DWORD intervalMs) {
 // end it. With one flag for both, a thread that ended by itself left the flag
 // false while still joinable: Stop skipped the join, and the next Start assigned
 // over a joinable std::thread, which terminates the process. The mutex keeps a
-// start and a stop from the UI and the hotkey thread from interleaving.
+// start and a stop made from two threads at once from interleaving.
 void AutoClicker::Start(const ClickerOptions& startOptions) {
     std::lock_guard<std::mutex> lock(lifecycle);
     if (running.load()) return;
