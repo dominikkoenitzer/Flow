@@ -181,7 +181,9 @@ void ToggleAutoClicker() {
         // Force update after stop
         Sleep(50);
     } else {
-        g_app.engine->StartAutoClicker(g_app.clickInterval);
+        ClickerOptions options;
+        options.intervalMs = (DWORD)g_app.clickInterval;
+        g_app.engine->StartAutoClicker(options);
         g_app.isClicking = true;
     }
     UpdateStatusDisplay();

@@ -256,6 +256,50 @@ public:
  */
 double PlaybackGapUs(ULONGLONG gapUs, double speed, HumanizationEngine* humanizer);
 
+// ---- auto-clicker options ----
+
+/** @brief The button the auto-clicker presses; the value is what settings store */
+enum class ClickButton { Left = 0, Right = 1, Middle = 2 };
+
+/** @brief Where the auto-clicker clicks; the value is what settings store */
+enum class ClickTarget { Cursor = 0, Point = 1 };
+
+/** @brief Most clicks per action: a triple click */
+constexpr int MAX_CLICK_COUNT = 3;
+
+/** @brief Largest random jitter on the click interval, in milliseconds */
+constexpr DWORD MAX_CLICK_JITTER = MAX_CLICK_INTERVAL;
+
+/** @brief Largest click limit; 0 means no limit */
+constexpr DWORD MAX_CLICK_LIMIT = 999999;
+
+/**
+ * @struct ClickerOptions
+ * @brief How the auto-clicker clicks
+ *
+ * One action is `count` clicks of `button` in quick succession, so a double
+ * click reaches the target as a double click. The interval is the wait
+ * between actions.
+ */
+struct ClickerOptions {
+    ClickButton button = ClickButton::Left;       ///< Button to press
+    int count = 1;                                ///< Clicks per action: 1, 2 or 3
+    DWORD intervalMs = DEFAULT_CLICK_INTERVAL;    ///< Wait between actions (ms)
+    DWORD jitterMs = 0;                           ///< Random range added to or taken off the wait (ms)
+    ClickTarget target = ClickTarget::Cursor;     ///< The cursor, or the fixed point below
+    POINT point = {0, 0};                         ///< Screen point for ClickTarget::Point
+    DWORD limit = 0;                              ///< Actions before the clicker stops; 0 = until stopped
+};
+
+/**
+ * @brief The options with every field brought into its range
+ * @param options Options as the UI or a settings file gave them
+ * @return The same options, each field clamped: interval 1 to 10000 ms,
+ *         jitter 0 to 10000 ms, count 1 to 3, limit 0 to 999999. An unknown
+ *         button is Left and an unknown target is the cursor.
+ */
+ClickerOptions ClampClickerOptions(ClickerOptions options);
+
 // ---- AutoClicker ----
 
 /**
@@ -268,10 +312,10 @@ double PlaybackGapUs(ULONGLONG gapUs, double speed, HumanizationEngine* humanize
  */
 class AutoClicker {
 public:
-    /** @brief Sends one click */
-    using Sender = std::function<void()>;
+    /** @brief Sends one action: the clicks the options ask for */
+    using Sender = std::function<void(const ClickerOptions&)>;
 
-    /** @param send Called on the clicker thread for every click */
+    /** @param send Called on the clicker thread for every action */
     explicit AutoClicker(Sender send);
 
     /** @brief Stops and joins the thread */
@@ -282,10 +326,10 @@ public:
 
     /**
      * @brief Start clicking
-     * @param intervalMs Wait after each click, in milliseconds
+     * @param options How to click; clamped before use
      * @note Does nothing while a run is active.
      */
-    void Start(DWORD intervalMs);
+    void Start(const ClickerOptions& options);
 
     /**
      * @brief Stop clicking and wait for the thread to end
@@ -297,19 +341,26 @@ public:
     /** @brief True from a start until the thread ends */
     bool IsActive() const { return running.load(); }
 
-    /** @brief Change the interval, also during a run */
-    void SetInterval(DWORD intervalMs) { interval.store(intervalMs); }
+    /** @brief Replace the options, also during a run; clamped before use */
+    void SetOptions(const ClickerOptions& options);
+
+    /** @brief The current options */
+    ClickerOptions GetOptions() const;
+
+    /** @brief Change only the interval, also during a run */
+    void SetInterval(DWORD intervalMs);
 
     /** @brief The current interval in milliseconds */
-    DWORD GetInterval() const { return interval.load(); }
+    DWORD GetInterval() const { return GetOptions().intervalMs; }
 
 private:
     void Run();
 
-    Sender send;                        ///< What one click does
+    Sender send;                        ///< What one action does
+    ClickerOptions options;             ///< Read by the thread before every action
+    mutable std::mutex optionsMutex;    ///< Guards options
     std::atomic<bool> running;          ///< True from a start until the thread ends
     std::atomic<bool> stopRequested;    ///< Stop signal for the thread
-    std::atomic<DWORD> interval;        ///< Click interval (ms)
     std::thread worker;                 ///< The clicker thread
     std::mutex lifecycle;               ///< Serialises Start and Stop
 };
@@ -413,10 +464,10 @@ public:
     // ===== Auto-Clicker Control =====
     
     /**
-     * @brief Start the auto-clicker at specified interval
-     * @param intervalMs Click interval in milliseconds
+     * @brief Start the auto-clicker
+     * @param options How to click; clamped before use
      */
-    void StartAutoClicker(DWORD intervalMs = DEFAULT_CLICK_INTERVAL);
+    void StartAutoClicker(const ClickerOptions& options = ClickerOptions());
     
     /**
      * @brief Stop the auto-clicker and wait for its thread to end
@@ -440,6 +491,18 @@ public:
      * @return Click interval in milliseconds
      */
     DWORD GetClickInterval() const { return clicker.GetInterval(); }
+
+    /**
+     * @brief Replace the clicker options, also while it is running
+     * @param options New options; clamped before use
+     */
+    void SetClickerOptions(const ClickerOptions& options) { clicker.SetOptions(options); }
+
+    /**
+     * @brief Get the current clicker options
+     * @return The options, as clamped
+     */
+    ClickerOptions GetClickerOptions() const { return clicker.GetOptions(); }
 
     // ===== Recording Control =====
     

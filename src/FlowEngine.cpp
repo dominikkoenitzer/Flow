@@ -140,7 +140,7 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
 }
 
 // One left click where the cursor is.
-static void SendLeftClick() {
+static void SendLeftClick(const ClickerOptions&) {
     INPUT input = {};
     input.type = INPUT_MOUSE;
     input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
@@ -438,12 +438,46 @@ void FlowEngine::SetControlKeys(DWORD record, DWORD playback, DWORD clicker, DWO
 
 // ---- auto-clicker ----
 
-AutoClicker::AutoClicker(Sender sendClick)
-    : send(std::move(sendClick)), running(false), stopRequested(false),
-      interval(DEFAULT_CLICK_INTERVAL) {}
+ClickerOptions ClampClickerOptions(ClickerOptions options) {
+    switch (options.button) {
+        case ClickButton::Left:
+        case ClickButton::Right:
+        case ClickButton::Middle:
+            break;
+        default:
+            options.button = ClickButton::Left;
+    }
+    if (options.target != ClickTarget::Cursor && options.target != ClickTarget::Point) {
+        options.target = ClickTarget::Cursor;
+    }
+    options.count = std::clamp(options.count, 1, MAX_CLICK_COUNT);
+    options.intervalMs = std::clamp(options.intervalMs, MIN_CLICK_INTERVAL, MAX_CLICK_INTERVAL);
+    options.jitterMs = std::min(options.jitterMs, MAX_CLICK_JITTER);
+    options.limit = std::min(options.limit, MAX_CLICK_LIMIT);
+    return options;
+}
+
+AutoClicker::AutoClicker(Sender sendAction)
+    : send(std::move(sendAction)), running(false), stopRequested(false) {}
 
 AutoClicker::~AutoClicker() {
     Stop();
+}
+
+void AutoClicker::SetOptions(const ClickerOptions& next) {
+    const ClickerOptions clamped = ClampClickerOptions(next);
+    std::lock_guard<std::mutex> lock(optionsMutex);
+    options = clamped;
+}
+
+ClickerOptions AutoClicker::GetOptions() const {
+    std::lock_guard<std::mutex> lock(optionsMutex);
+    return options;
+}
+
+void AutoClicker::SetInterval(DWORD intervalMs) {
+    std::lock_guard<std::mutex> lock(optionsMutex);
+    options.intervalMs = std::clamp(intervalMs, MIN_CLICK_INTERVAL, MAX_CLICK_INTERVAL);
 }
 
 // running says whether the thread is running; stopRequested is the request to
@@ -451,7 +485,7 @@ AutoClicker::~AutoClicker() {
 // false while still joinable: Stop skipped the join, and the next Start assigned
 // over a joinable std::thread, which terminates the process. The mutex keeps a
 // start and a stop from the UI and the hotkey thread from interleaving.
-void AutoClicker::Start(DWORD intervalMs) {
+void AutoClicker::Start(const ClickerOptions& startOptions) {
     std::lock_guard<std::mutex> lock(lifecycle);
     if (running.load()) return;
 
@@ -460,7 +494,7 @@ void AutoClicker::Start(DWORD intervalMs) {
         worker.join();
     }
 
-    interval.store(intervalMs);
+    SetOptions(startOptions);
     stopRequested.store(false);
     running.store(true);
 
@@ -480,10 +514,11 @@ void AutoClicker::Run() {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
     while (!stopRequested.load()) {
-        send();
+        const ClickerOptions now = GetOptions();
+        send(now);
 
         // The Humanize switch belongs to playback and leaves this interval alone.
-        const DWORD delay = interval.load();
+        const DWORD delay = now.intervalMs;
 
         // Wait the click interval (sub-ms accurate, releases the CPU). A stop
         // ends the wait, so a long interval does not hold the stop up.
@@ -493,8 +528,8 @@ void AutoClicker::Run() {
     running.store(false);
 }
 
-void FlowEngine::StartAutoClicker(DWORD intervalMs) {
-    clicker.Start(intervalMs);
+void FlowEngine::StartAutoClicker(const ClickerOptions& options) {
+    clicker.Start(options);
 }
 
 void FlowEngine::StopAutoClicker() {
