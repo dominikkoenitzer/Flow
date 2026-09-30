@@ -457,8 +457,17 @@ ClickerOptions ClampClickerOptions(ClickerOptions options) {
     return options;
 }
 
+DWORD JitteredIntervalMs(DWORD intervalMs, DWORD jitterMs, std::mt19937& rng) {
+    if (jitterMs == 0) return std::max(intervalMs, MIN_CLICK_INTERVAL);
+    const long long range = static_cast<long long>(jitterMs);
+    std::uniform_int_distribution<long long> draw(-range, range);
+    const long long wait = static_cast<long long>(intervalMs) + draw(rng);
+    return static_cast<DWORD>(std::max<long long>(wait, MIN_CLICK_INTERVAL));
+}
+
 AutoClicker::AutoClicker(Sender sendAction)
-    : send(std::move(sendAction)), running(false), stopRequested(false) {}
+    : send(std::move(sendAction)), rng(std::random_device{}()), running(false),
+      stopRequested(false) {}
 
 AutoClicker::~AutoClicker() {
     Stop();
@@ -517,8 +526,8 @@ void AutoClicker::Run() {
         const ClickerOptions now = GetOptions();
         send(now);
 
-        // The Humanize switch belongs to playback and leaves this interval alone.
-        const DWORD delay = now.intervalMs;
+        // The clicker's own jitter, not the playback Humanize switch.
+        const DWORD delay = JitteredIntervalMs(now.intervalMs, now.jitterMs, rng);
 
         // Wait the click interval (sub-ms accurate, releases the CPU). A stop
         // ends the wait, so a long interval does not hold the stop up.
