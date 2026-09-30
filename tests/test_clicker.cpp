@@ -15,6 +15,7 @@
 #include <atomic>
 #include <functional>
 #include <random>
+#include <thread>
 
 using flow::AutoClicker;
 using flow::ClickerOptions;
@@ -247,4 +248,102 @@ TEST_CASE("Jitter averages out to the interval") {
     const int draws = 20000;
     for (int i = 0; i < draws; ++i) total += flow::JitteredIntervalMs(500, 100, rng);
     CHECK(total / draws == doctest::Approx(500.0).epsilon(0.01));
+}
+
+TEST_CASE("A zero limit means no limit") {
+    CHECK_FALSE(flow::ClickLimitReached(0, 0));
+    CHECK_FALSE(flow::ClickLimitReached(1000000, 0));
+    CHECK_FALSE(flow::ClickLimitReached(4, 5));
+    CHECK(flow::ClickLimitReached(5, 5));
+    CHECK(flow::ClickLimitReached(6, 5));
+}
+
+TEST_CASE("A limit stops the clicker by itself after that many actions") {
+    std::atomic<int> actions{0};
+    AutoClicker clicker([&](const ClickerOptions&) { ++actions; });
+
+    ClickerOptions options = every(1);
+    options.limit = 5;
+    clicker.Start(options);
+    REQUIRE(waitFor([&] { return !clicker.IsActive(); }));
+    CHECK(actions.load() == 5);
+    CHECK(clicker.GetActionsDone() == 5);
+
+    Sleep(20);
+    CHECK(actions.load() == 5);
+}
+
+TEST_CASE("The clicker starts again after a limit ended its run") {
+    // Regression: a run that ended at its limit left a finished thread that
+    // was never joined. Stop skipped the join because the clicker already
+    // read as inactive, and the next Start assigned over the joinable
+    // std::thread, which ends the process.
+    std::atomic<int> actions{0};
+    AutoClicker clicker([&](const ClickerOptions&) { ++actions; });
+
+    ClickerOptions options = every(1);
+    options.limit = 2;
+    for (int run = 1; run <= 3; ++run) {
+        clicker.Start(options);
+        REQUIRE(waitFor([&] { return !clicker.IsActive(); }));
+        CHECK(actions.load() == run * 2);
+        CHECK(clicker.GetActionsDone() == 2);  // counted per run
+    }
+
+    // And a stop after a run has ended by itself is still harmless.
+    clicker.Stop();
+    clicker.Start(options);
+    REQUIRE(waitFor([&] { return !clicker.IsActive(); }));
+    clicker.Stop();
+    CHECK(actions.load() == 8);
+}
+
+TEST_CASE("A limit does not wait out the interval after the last action") {
+    std::atomic<int> actions{0};
+    AutoClicker clicker([&](const ClickerOptions&) { ++actions; });
+
+    ClickerOptions options = every(10000);
+    options.limit = 1;
+    HighResTimer timer;
+    clicker.Start(options);
+    REQUIRE(waitFor([&] { return !clicker.IsActive(); }));
+    CHECK(timer.GetElapsedMicroseconds() < 2000000);
+    CHECK(actions.load() == 1);
+    clicker.Stop();
+}
+
+TEST_CASE("A limit lowered during a run below what is done ends it") {
+    std::atomic<int> actions{0};
+    AutoClicker clicker([&](const ClickerOptions&) { ++actions; });
+
+    clicker.Start(every(1));
+    REQUIRE(waitFor([&] { return actions.load() >= 5; }));
+    ClickerOptions lowered = every(1);
+    lowered.limit = 2;
+    clicker.SetOptions(lowered);
+    REQUIRE(waitFor([&] { return !clicker.IsActive(); }));
+    clicker.Stop();
+}
+
+TEST_CASE("Starting and stopping from two threads at once stays consistent") {
+    // The hotkey and the button can reach the clicker at the same moment.
+    std::atomic<int> actions{0};
+    AutoClicker clicker([&](const ClickerOptions&) { ++actions; });
+
+    ClickerOptions options = every(1);
+    options.limit = 1;
+    std::thread starter([&] {
+        for (int i = 0; i < 200; ++i) clicker.Start(options);
+    });
+    std::thread stopper([&] {
+        for (int i = 0; i < 200; ++i) clicker.Stop();
+    });
+    starter.join();
+    stopper.join();
+
+    clicker.Stop();
+    CHECK_FALSE(clicker.IsActive());
+    const int after = actions.load();
+    Sleep(20);
+    CHECK(actions.load() == after);
 }
