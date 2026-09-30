@@ -4,8 +4,8 @@
  *
  * Every clicker here is given a counter instead of SendInput, so the thread
  * runs for real and nothing is clicked. The waits are bounded and generous: a
- * shared CI runner can deschedule a thread for a while, and only the order of
- * events is asserted, never how long they took.
+ * shared CI runner can deschedule a thread for a while, so a time is only ever
+ * checked against a bound far above what it should take.
  */
 #include "doctest.h"
 
