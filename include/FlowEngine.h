@@ -300,6 +300,15 @@ struct ClickerOptions {
  */
 ClickerOptions ClampClickerOptions(ClickerOptions options);
 
+/**
+ * @brief The wait before the next action, with the jitter applied
+ * @param intervalMs Configured interval in milliseconds
+ * @param jitterMs Largest amount added to or taken off it; 0 for none
+ * @param rng Source of the draw, uniform over -jitterMs to +jitterMs
+ * @return The interval moved by the draw, never below MIN_CLICK_INTERVAL
+ */
+DWORD JitteredIntervalMs(DWORD intervalMs, DWORD jitterMs, std::mt19937& rng);
+
 // ---- AutoClicker ----
 
 /**
@@ -357,6 +366,7 @@ private:
     void Run();
 
     Sender send;                        ///< What one action does
+    std::mt19937 rng;                   ///< Jitter draws; used by the thread only
     ClickerOptions options;             ///< Read by the thread before every action
     mutable std::mutex optionsMutex;    ///< Guards options
     std::atomic<bool> running;          ///< True from a start until the thread ends

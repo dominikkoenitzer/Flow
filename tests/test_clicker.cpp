@@ -11,8 +11,10 @@
 
 #include "FlowEngine.h"
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
+#include <random>
 
 using flow::AutoClicker;
 using flow::ClickerOptions;
@@ -205,4 +207,44 @@ TEST_CASE("Every action is sent with the options of the run") {
     REQUIRE(waitFor([&] { return actions.load() >= 3; }));
     clicker.Stop();
     CHECK(allRight.load());
+}
+
+TEST_CASE("No jitter leaves the interval exact") {
+    std::mt19937 rng(7);
+    for (int i = 0; i < 100; ++i) {
+        CHECK(flow::JitteredIntervalMs(100, 0, rng) == 100);
+    }
+}
+
+TEST_CASE("Jitter stays within the configured range, on both sides") {
+    std::mt19937 rng(12345);
+    DWORD lowest = 1000, highest = 0;
+    for (int i = 0; i < 5000; ++i) {
+        const DWORD wait = flow::JitteredIntervalMs(100, 20, rng);
+        CHECK(wait >= 80);
+        CHECK(wait <= 120);
+        lowest = std::min(lowest, wait);
+        highest = std::max(highest, wait);
+    }
+    // 5000 uniform draws over 41 values reach both ends.
+    CHECK(lowest == 80);
+    CHECK(highest == 120);
+}
+
+TEST_CASE("Jitter larger than the interval never waits less than a millisecond") {
+    // A negative wait would wrap to a DWORD of about 49 days.
+    std::mt19937 rng(99);
+    for (int i = 0; i < 5000; ++i) {
+        const DWORD wait = flow::JitteredIntervalMs(5, 50, rng);
+        CHECK(wait >= flow::MIN_CLICK_INTERVAL);
+        CHECK(wait <= 55);
+    }
+}
+
+TEST_CASE("Jitter averages out to the interval") {
+    std::mt19937 rng(2024);
+    double total = 0.0;
+    const int draws = 20000;
+    for (int i = 0; i < draws; ++i) total += flow::JitteredIntervalMs(500, 100, rng);
+    CHECK(total / draws == doctest::Approx(500.0).epsilon(0.01));
 }
