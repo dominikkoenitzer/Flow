@@ -333,8 +333,18 @@ static const wchar_t* ClickCountText() {
     return names[g_app.clickCount >= 1 && g_app.clickCount <= 3 ? g_app.clickCount - 1 : 0];
 }
 
+// Picking the fixed point: press on the Target field and drag to the spot.
+// The field holds the mouse capture while the button is down, so it sees the
+// release wherever it happens. A release over the field itself is a plain
+// click and opens the menu instead.
+static bool g_pickPressed = false;    // left button went down on the Target field
+static bool g_pickDragging = false;   // and the cursor has left the field since
+static POINT g_pickLive = { 0, 0 };   // the cursor while dragging
+
 static void ClickTargetText(wchar_t* out, size_t n) {
-    if (g_app.clickAtPoint && g_app.hasClickPoint)
+    if (g_pickDragging)
+        swprintf(out, n, L"%d, %d", (int)g_pickLive.x, (int)g_pickLive.y);
+    else if (g_app.clickAtPoint && g_app.hasClickPoint)
         swprintf(out, n, L"%d, %d", g_app.clickX, g_app.clickY);
     else
         swprintf(out, n, L"Cursor");
@@ -366,6 +376,63 @@ static void ShowClickerChoiceMenu(HWND hwnd, int fieldId) {
     GetWindowRect(GetDlgItem(hwnd, fieldId), &rcField);
     TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN, rcField.left, rcField.bottom + 4, 0, hwnd, NULL);
     DestroyMenu(hMenu);
+}
+
+LRESULT CALLBACK TargetFieldProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id, DWORD_PTR ref) {
+    (void)id; (void)ref;
+    switch (m) {
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONDBLCLK:
+            g_pickPressed = true;
+            g_pickDragging = false;
+            SetCapture(h);
+            return 0;
+
+        case WM_MOUSEMOVE:
+            if (g_pickPressed) {
+                POINT pt; GetCursorPos(&pt);
+                RECT rc; GetWindowRect(h, &rc);
+                if (!PtInRect(&rc, pt)) g_pickDragging = true;
+                if (g_pickDragging) {
+                    SetCursor(LoadCursor(NULL, IDC_CROSS));
+                    g_pickLive = pt;
+                    InvalidateRect(h, NULL, FALSE);
+                }
+                return 0;
+            }
+            break;
+
+        case WM_LBUTTONUP:
+            if (g_pickPressed) {
+                const bool picked = g_pickDragging;
+                g_pickPressed = false;
+                g_pickDragging = false;
+                ReleaseCapture();
+                if (picked) {
+                    POINT pt; GetCursorPos(&pt);
+                    g_app.clickX = pt.x;
+                    g_app.clickY = pt.y;
+                    g_app.hasClickPoint = true;
+                    g_app.clickAtPoint = true;
+                    PushClickerOptions();
+                    InvalidateRect(h, NULL, FALSE);
+                } else {
+                    ShowClickerChoiceMenu(GetParent(h), BTN_CLICK_TARGET);
+                }
+                return 0;
+            }
+            break;
+
+        case WM_CAPTURECHANGED:
+            // Capture taken away part way, by Alt+Tab or another window: no pick.
+            if (g_pickPressed) {
+                g_pickPressed = false;
+                g_pickDragging = false;
+                InvalidateRect(h, NULL, FALSE);
+            }
+            break;
+    }
+    return DefSubclassProc(h, m, w, l);
 }
 
 // Render the whole window (header + cards + labels) into a device context.
@@ -809,7 +876,9 @@ void CreateControls(HWND hwnd) {
     // Clicker choice fields (owner-draw pills; a click opens their menu)
     CreateFlowButton(hwnd, BTN_CLICK_BUTTON, 0, 0, 0, 0, L"Mouse button to click");
     CreateFlowButton(hwnd, BTN_CLICK_COUNT,  0, 0, 0, 0, L"Single, double or triple click");
-    CreateFlowButton(hwnd, BTN_CLICK_TARGET, 0, 0, 0, 0, L"Click at the cursor or at a fixed point");
+    HWND target = CreateFlowButton(hwnd, BTN_CLICK_TARGET, 0, 0, 0, 0,
+                                   L"Cursor or a fixed point. Drag from here to pick the point.");
+    SetWindowSubclass(target, TargetFieldProc, 0, 0);
 
     // Toggle switches (owner-draw; label left + switch right)
     CreateFlowButton(hwnd, CHK_CONTINUOUS, 0, 0, 0, 0, L"Repeat playback until stopped");
