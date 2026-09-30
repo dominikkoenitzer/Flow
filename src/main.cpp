@@ -293,6 +293,81 @@ static void ApplyIntervalEdit(HWND hwnd) {
     UpdateStatusDisplay();
 }
 
+// Hand the window's clicker options to the engine, so a running clicker
+// follows a change from its next click.
+static void PushClickerOptions() {
+    if (g_app.engine) g_app.engine->SetClickerOptions(CurrentClickerOptions());
+}
+
+// Read a whole-number edit, clamp it to [lo, hi], and write the clamped value back.
+static int ApplyNumberEdit(HWND hwnd, int id, int lo, int hi) {
+    wchar_t buf[32];
+    GetDlgItemTextW(hwnd, id, buf, 32);
+    long v = wcstol(buf, nullptr, 10);
+    if (v < lo) v = lo;
+    if (v > hi) v = hi;
+    wchar_t out[16];
+    swprintf(out, 16, L"%ld", v);
+    SetDlgItemTextW(hwnd, id, out);
+    return (int)v;
+}
+
+static void ApplyJitterEdit(HWND hwnd) {
+    g_app.clickJitter = ApplyNumberEdit(hwnd, EDIT_JITTER, 0, (int)MAX_CLICK_JITTER);
+    PushClickerOptions();
+}
+
+static void ApplyClickLimitEdit(HWND hwnd) {
+    g_app.clickLimit = ApplyNumberEdit(hwnd, EDIT_CLICK_LIMIT, 0, (int)MAX_CLICK_LIMIT);
+    PushClickerOptions();
+}
+
+// What the clicker's choice fields show.
+static const wchar_t* ClickButtonText() {
+    static const wchar_t* names[] = { L"Left", L"Right", L"Middle" };
+    return names[g_app.clickButton >= 0 && g_app.clickButton <= 2 ? g_app.clickButton : 0];
+}
+
+static const wchar_t* ClickCountText() {
+    static const wchar_t* names[] = { L"1x", L"2x", L"3x" };
+    return names[g_app.clickCount >= 1 && g_app.clickCount <= 3 ? g_app.clickCount - 1 : 0];
+}
+
+static void ClickTargetText(wchar_t* out, size_t n) {
+    if (g_app.clickAtPoint && g_app.hasClickPoint)
+        swprintf(out, n, L"%d, %d", g_app.clickX, g_app.clickY);
+    else
+        swprintf(out, n, L"Cursor");
+}
+
+// The menu under a clicker choice field, listing its values with the current
+// one checked. The choice arrives as a WM_COMMAND, like the Settings menu.
+static void ShowClickerChoiceMenu(HWND hwnd, int fieldId) {
+    HMENU hMenu = CreatePopupMenu();
+    if (fieldId == BTN_CLICK_BUTTON) {
+        AppendMenuW(hMenu, MF_STRING | (g_app.clickButton == 0 ? MF_CHECKED : 0), MENU_CLICK_LEFT, L"Left");
+        AppendMenuW(hMenu, MF_STRING | (g_app.clickButton == 1 ? MF_CHECKED : 0), MENU_CLICK_RIGHT, L"Right");
+        AppendMenuW(hMenu, MF_STRING | (g_app.clickButton == 2 ? MF_CHECKED : 0), MENU_CLICK_MIDDLE, L"Middle");
+    } else if (fieldId == BTN_CLICK_COUNT) {
+        AppendMenuW(hMenu, MF_STRING | (g_app.clickCount == 1 ? MF_CHECKED : 0), MENU_CLICKS_1, L"1x");
+        AppendMenuW(hMenu, MF_STRING | (g_app.clickCount == 2 ? MF_CHECKED : 0), MENU_CLICKS_2, L"2x");
+        AppendMenuW(hMenu, MF_STRING | (g_app.clickCount == 3 ? MF_CHECKED : 0), MENU_CLICKS_3, L"3x");
+    } else {
+        bool atPoint = g_app.clickAtPoint && g_app.hasClickPoint;
+        wchar_t point[48];
+        if (g_app.hasClickPoint) swprintf(point, 48, L"Point  %d, %d", g_app.clickX, g_app.clickY);
+        else                     swprintf(point, 48, L"Point");
+        AppendMenuW(hMenu, MF_STRING | (atPoint ? 0 : MF_CHECKED), MENU_TARGET_CURSOR, L"Cursor");
+        AppendMenuW(hMenu, MF_STRING | (atPoint ? MF_CHECKED : 0) | (g_app.hasClickPoint ? 0 : MF_GRAYED),
+                    MENU_TARGET_POINT, point);
+    }
+
+    RECT rcField;
+    GetWindowRect(GetDlgItem(hwnd, fieldId), &rcField);
+    TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN, rcField.left, rcField.bottom + 4, 0, hwnd, NULL);
+    DestroyMenu(hMenu);
+}
+
 // Render the whole window (header + cards + labels) into a device context.
 static void PaintUI(HDC hdc, RECT client) {
     HBRUSH bg = CreateSolidBrush(BG_PRIMARY);
@@ -320,9 +395,11 @@ static void PaintUI(HDC hdc, RECT client) {
     HWND focus = GetFocus();
     struct E { int id, x, y, w; };
     E edits[] = {
-        { EDIT_SPEED,    CTRL_RIGHT - EDIT_W, ROW_SPEED_Y - 4,    EDIT_W },
-        { EDIT_LOOPS,    CTRL_RIGHT - EDIT_W, ROW_LOOPS_Y - 4,    EDIT_W },
-        { EDIT_INTERVAL, CTRL_RIGHT - 70,     ROW_INTERVAL_Y - 4, 70 },
+        { EDIT_SPEED,       CTRL_RIGHT - EDIT_W,     ROW_SPEED_Y - 4,    EDIT_W },
+        { EDIT_LOOPS,       CTRL_RIGHT - EDIT_W,     ROW_LOOPS_Y - 4,    EDIT_W },
+        { EDIT_INTERVAL,    CLK_COL1_RIGHT - 70,     ROW_INTERVAL_Y - 4, 70 },
+        { EDIT_JITTER,      CTRL_RIGHT - 70,         ROW_INTERVAL_Y - 4, 70 },
+        { EDIT_CLICK_LIMIT, CTRL_RIGHT - 70,         ROW_TARGET_Y - 4,   70 },
     };
     {
         Gdiplus::Graphics g(hdc);
@@ -405,12 +482,18 @@ static void PaintUI(HDC hdc, RECT client) {
     // ---- auto-clicker (its own caption; it works without a macro) ----
     TextLine(hdc, L"Click repeatedly at a set interval.",
              cx, Sc(CLK_CAPTION_Y), g_fonts.small_, TEXT_FAINT);
-    TextLine(hdc, L"Interval (ms)", cx, Sc(ROW_INTERVAL_Y), g_fonts.body, TEXT_SECONDARY);
+    const int col2 = Sc(CLK_COL2_X);
+    TextLine(hdc, L"Interval (ms)", cx,   Sc(ROW_INTERVAL_Y), g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"Jitter (ms)",   col2, Sc(ROW_INTERVAL_Y), g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"Button",        cx,   Sc(ROW_BUTTON_Y),   g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"Clicks",        col2, Sc(ROW_BUTTON_Y),   g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"Target",        cx,   Sc(ROW_TARGET_Y),   g_fonts.body, TEXT_SECONDARY);
+    TextLine(hdc, L"Stop after",    col2, Sc(ROW_TARGET_Y),   g_fonts.body, TEXT_SECONDARY);
     {
         wchar_t cps[48];
         int per = g_app.clickInterval > 0 ? g_app.clickInterval : 1;
         swprintf(cps, 48, L"≈ %d clicks/sec", (1000 + per / 2) / per);
-        RECT hr = { cx, Sc(INTERVAL_HELP_Y), Sc(CTRL_RIGHT), Sc(INTERVAL_HELP_Y) + Sc(20) };
+        RECT hr = { cx, Sc(INTERVAL_HELP_Y), Sc(CLK_COL1_RIGHT), Sc(INTERVAL_HELP_Y) + Sc(20) };
         HFONT o = (HFONT)SelectObject(hdc, g_fonts.small_);
         SetBkMode(hdc, TRANSPARENT); SetTextColor(hdc, TEXT_FAINT);
         DrawTextW(hdc, cps, -1, &hr, DT_RIGHT | DT_SINGLELINE | DT_TOP);
@@ -483,6 +566,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (id == EDIT_SPEED) ApplySpeedEdit(hwnd);
                 else if (id == EDIT_LOOPS) ApplyLoopsEdit(hwnd);
                 else if (id == EDIT_INTERVAL) ApplyIntervalEdit(hwnd);
+                else if (id == EDIT_JITTER) ApplyJitterEdit(hwnd);
+                else if (id == EDIT_CLICK_LIMIT) ApplyClickLimitEdit(hwnd);
                 InvalidateRect(hwnd, NULL, FALSE);   // clear focus ring
                 break;
             }
@@ -499,6 +584,32 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 case BTN_STOP_ALL: StopAll(hwnd); break;
                 case BTN_SETTINGS: ShowSettingsMenu(hwnd); break;
                 case BTN_TOGGLE_CLICKER: ToggleAutoClicker(); break;
+                case BTN_CLICK_BUTTON:
+                case BTN_CLICK_COUNT:
+                case BTN_CLICK_TARGET:
+                    ShowClickerChoiceMenu(hwnd, id);
+                    break;
+
+                case MENU_CLICK_LEFT:
+                case MENU_CLICK_RIGHT:
+                case MENU_CLICK_MIDDLE:
+                    g_app.clickButton = id - MENU_CLICK_LEFT;
+                    PushClickerOptions();
+                    InvalidateRect(GetDlgItem(hwnd, BTN_CLICK_BUTTON), NULL, FALSE);
+                    break;
+                case MENU_CLICKS_1:
+                case MENU_CLICKS_2:
+                case MENU_CLICKS_3:
+                    g_app.clickCount = id - MENU_CLICKS_1 + 1;
+                    PushClickerOptions();
+                    InvalidateRect(GetDlgItem(hwnd, BTN_CLICK_COUNT), NULL, FALSE);
+                    break;
+                case MENU_TARGET_CURSOR:
+                case MENU_TARGET_POINT:
+                    g_app.clickAtPoint = (id == MENU_TARGET_POINT) && g_app.hasClickPoint;
+                    PushClickerOptions();
+                    InvalidateRect(GetDlgItem(hwnd, BTN_CLICK_TARGET), NULL, FALSE);
+                    break;
 
                 case CHK_CONTINUOUS:
                     g_app.continuous = !g_app.continuous;
@@ -542,6 +653,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     DrawToggle(dis, L"Loop continuously", g_app.continuous);
                 else if (dis->CtlID == CHK_HUMANIZE)
                     DrawToggle(dis, L"Humanize timing", g_app.humanizationEnabled);
+                else if (dis->CtlID == BTN_CLICK_BUTTON)
+                    DrawKeyField(dis, ClickButtonText());
+                else if (dis->CtlID == BTN_CLICK_COUNT)
+                    DrawKeyField(dis, ClickCountText());
+                else if (dis->CtlID == BTN_CLICK_TARGET) {
+                    wchar_t target[48];
+                    ClickTargetText(target, 48);
+                    DrawKeyField(dis, target);
+                }
                 else
                     DrawFlowButton(dis);
                 return TRUE;
@@ -627,7 +747,14 @@ void LayoutControls(HWND hwnd) {
         // Inline numeric edits, right edge at CTRL_RIGHT
         { EDIT_SPEED,    Sc(CTRL_RIGHT - EDIT_W), Sc(ROW_SPEED_Y - 4),    Sc(EDIT_W), Sc(30) },
         { EDIT_LOOPS,    Sc(CTRL_RIGHT - EDIT_W), Sc(ROW_LOOPS_Y - 4),    Sc(EDIT_W), Sc(30) },
-        { EDIT_INTERVAL, Sc(CTRL_RIGHT - 70),     Sc(ROW_INTERVAL_Y - 4), Sc(70),     Sc(30) },
+        { EDIT_INTERVAL,    Sc(CLK_COL1_RIGHT - 70), Sc(ROW_INTERVAL_Y - 4), Sc(70), Sc(30) },
+        { EDIT_JITTER,      Sc(CTRL_RIGHT - 70),     Sc(ROW_INTERVAL_Y - 4), Sc(70), Sc(30) },
+        { EDIT_CLICK_LIMIT, Sc(CTRL_RIGHT - 70),     Sc(ROW_TARGET_Y - 4),   Sc(70), Sc(30) },
+        // Clicker choice fields: owner-draw, so each covers the whole pill
+        // PaintUI draws around an edit (5 wider each side, 3 taller).
+        { BTN_CLICK_BUTTON, Sc(CLK_COL1_RIGHT - 80 - 5),  Sc(ROW_BUTTON_Y - 4 - 3), Sc(80 + 10),  Sc(36) },
+        { BTN_CLICK_COUNT,  Sc(CTRL_RIGHT - 70 - 5),      Sc(ROW_BUTTON_Y - 4 - 3), Sc(70 + 10),  Sc(36) },
+        { BTN_CLICK_TARGET, Sc(CLK_COL1_RIGHT - 110 - 5), Sc(ROW_TARGET_Y - 4 - 3), Sc(110 + 10), Sc(36) },
         // Toggle switches, aligned with the edits
         { CHK_CONTINUOUS, cx, Sc(ROW_CONT_Y - 4), Sc(CTRL_W), Sc(30) },
         { CHK_HUMANIZE,   cx, Sc(ROW_HUM_Y - 4),  Sc(CTRL_W), Sc(30) },
@@ -642,7 +769,7 @@ void LayoutControls(HWND hwnd) {
         if (c) SetWindowPos(c, NULL, p.x, p.y, p.w, p.h, SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
-    const int edits[] = { EDIT_SPEED, EDIT_LOOPS, EDIT_INTERVAL };
+    const int edits[] = { EDIT_SPEED, EDIT_LOOPS, EDIT_INTERVAL, EDIT_JITTER, EDIT_CLICK_LIMIT };
     for (int id : edits)
         SendDlgItemMessageW(hwnd, id, WM_SETFONT, (WPARAM)g_fonts.mono, TRUE);
 }
@@ -676,6 +803,13 @@ void CreateControls(HWND hwnd) {
     makeEdit(EDIT_SPEED,    0);
     makeEdit(EDIT_LOOPS,    ES_NUMBER);
     makeEdit(EDIT_INTERVAL, ES_NUMBER);
+    makeEdit(EDIT_JITTER,      ES_NUMBER);
+    makeEdit(EDIT_CLICK_LIMIT, ES_NUMBER);
+
+    // Clicker choice fields (owner-draw pills; a click opens their menu)
+    CreateFlowButton(hwnd, BTN_CLICK_BUTTON, 0, 0, 0, 0, L"Mouse button to click");
+    CreateFlowButton(hwnd, BTN_CLICK_COUNT,  0, 0, 0, 0, L"Single, double or triple click");
+    CreateFlowButton(hwnd, BTN_CLICK_TARGET, 0, 0, 0, 0, L"Click at the cursor or at a fixed point");
 
     // Toggle switches (owner-draw; label left + switch right)
     CreateFlowButton(hwnd, CHK_CONTINUOUS, 0, 0, 0, 0, L"Repeat playback until stopped");
@@ -694,6 +828,8 @@ void CreateControls(HWND hwnd) {
     swprintf(buf, 32, L"%g", g_app.playbackSpeed); SetDlgItemTextW(hwnd, EDIT_SPEED, buf);
     swprintf(buf, 32, L"%d", g_app.loopCount);      SetDlgItemTextW(hwnd, EDIT_LOOPS, buf);
     swprintf(buf, 32, L"%d", g_app.clickInterval);  SetDlgItemTextW(hwnd, EDIT_INTERVAL, buf);
+    swprintf(buf, 32, L"%d", g_app.clickJitter);    SetDlgItemTextW(hwnd, EDIT_JITTER, buf);
+    swprintf(buf, 32, L"%d", g_app.clickLimit);     SetDlgItemTextW(hwnd, EDIT_CLICK_LIMIT, buf);
 
     // Play is disabled until a macro exists
     EnableWindow(GetDlgItem(hwnd, BTN_PLAY),
