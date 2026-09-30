@@ -139,19 +139,37 @@ void HumanizationEngine::SetDistribution(double mean, double stddev) {
     distribution = std::normal_distribution<double>(mean, stddev > 0.0 ? stddev : 1.0);
 }
 
-// One left click where the cursor is.
-static void SendLeftClick(const ClickerOptions&) {
-    INPUT input = {};
-    input.type = INPUT_MOUSE;
-    input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-    SendInput(1, &input, sizeof(INPUT));
+// One clicker action: move to the fixed point when the options name one, then
+// the clicks, each a press and a release. The clicks of a double or triple
+// click follow each other within a few milliseconds, well inside the system's
+// double-click time, so the target sees one double or triple click.
+static void SendClickAction(const ClickerOptions& options) {
+    if (options.target == ClickTarget::Point) {
+        SetCursorPos(options.point.x, options.point.y);
+    }
 
-    Sleep(1);
+    DWORD down = MOUSEEVENTF_LEFTDOWN, up = MOUSEEVENTF_LEFTUP;
+    if (options.button == ClickButton::Right) {
+        down = MOUSEEVENTF_RIGHTDOWN;
+        up = MOUSEEVENTF_RIGHTUP;
+    } else if (options.button == ClickButton::Middle) {
+        down = MOUSEEVENTF_MIDDLEDOWN;
+        up = MOUSEEVENTF_MIDDLEUP;
+    }
 
-    ZeroMemory(&input, sizeof(INPUT));
-    input.type = INPUT_MOUSE;
-    input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-    SendInput(1, &input, sizeof(INPUT));
+    for (int i = 0; i < options.count; ++i) {
+        if (i > 0) Sleep(1);
+
+        INPUT input = {};
+        input.type = INPUT_MOUSE;
+        input.mi.dwFlags = down;
+        SendInput(1, &input, sizeof(INPUT));
+
+        Sleep(1);
+
+        input.mi.dwFlags = up;
+        SendInput(1, &input, sizeof(INPUT));
+    }
 }
 
 // ---- construction and teardown ----
@@ -160,7 +178,7 @@ FlowEngine::FlowEngine()
     : isRecording(false), recordingStartTicks(0), counterFrequency(0),
       // The default hotkeys (see AppState) until SetControlKeys brings the user's.
       controlKeys{ {VK_F8}, {VK_F9}, {VK_F6}, {VK_PAUSE} }, skippedPress{},
-      clicker(SendLeftClick), isPlaying(false), shouldStopPlayback(false),
+      clicker(SendClickAction), isPlaying(false), shouldStopPlayback(false),
       loopCount(1), currentLoopIteration(0), playbackSpeed(1.0), humanizationEnabled(true) {
     LARGE_INTEGER value;
     QueryPerformanceFrequency(&value);
