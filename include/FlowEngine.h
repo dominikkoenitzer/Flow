@@ -309,6 +309,13 @@ ClickerOptions ClampClickerOptions(ClickerOptions options);
  */
 DWORD JitteredIntervalMs(DWORD intervalMs, DWORD jitterMs, std::mt19937& rng);
 
+/**
+ * @brief Whether a run has done all the actions its limit allows
+ * @param done Actions sent so far in this run
+ * @param limit The options' limit; 0 means no limit
+ */
+inline bool ClickLimitReached(DWORD done, DWORD limit) { return limit != 0 && done >= limit; }
+
 // ---- AutoClicker ----
 
 /**
@@ -347,8 +354,11 @@ public:
      */
     void Stop();
 
-    /** @brief True from a start until the thread ends */
+    /** @brief True from a start until the thread ends, by a stop or at the limit */
     bool IsActive() const { return running.load(); }
+
+    /** @brief Actions sent since the last start */
+    DWORD GetActionsDone() const { return actionsDone.load(); }
 
     /** @brief Replace the options, also during a run; clamped before use */
     void SetOptions(const ClickerOptions& options);
@@ -371,6 +381,7 @@ private:
     mutable std::mutex optionsMutex;    ///< Guards options
     std::atomic<bool> running;          ///< True from a start until the thread ends
     std::atomic<bool> stopRequested;    ///< Stop signal for the thread
+    std::atomic<DWORD> actionsDone;     ///< Actions sent since the last start
     std::thread worker;                 ///< The clicker thread
     std::mutex lifecycle;               ///< Serialises Start and Stop
 };

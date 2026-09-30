@@ -467,7 +467,7 @@ DWORD JitteredIntervalMs(DWORD intervalMs, DWORD jitterMs, std::mt19937& rng) {
 
 AutoClicker::AutoClicker(Sender sendAction)
     : send(std::move(sendAction)), rng(std::random_device{}()), running(false),
-      stopRequested(false) {}
+      stopRequested(false), actionsDone(0) {}
 
 AutoClicker::~AutoClicker() {
     Stop();
@@ -504,6 +504,7 @@ void AutoClicker::Start(const ClickerOptions& startOptions) {
     }
 
     SetOptions(startOptions);
+    actionsDone.store(0);
     stopRequested.store(false);
     running.store(true);
 
@@ -524,7 +525,11 @@ void AutoClicker::Run() {
 
     while (!stopRequested.load()) {
         const ClickerOptions now = GetOptions();
+        // Checked before each action as well as after, so a limit lowered
+        // during a run below what is already done ends it at once.
+        if (ClickLimitReached(actionsDone.load(), now.limit)) break;
         send(now);
+        if (ClickLimitReached(++actionsDone, now.limit)) break;
 
         // The clicker's own jitter, not the playback Humanize switch.
         const DWORD delay = JitteredIntervalMs(now.intervalMs, now.jitterMs, rng);
