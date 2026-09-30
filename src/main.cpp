@@ -189,7 +189,9 @@ static ClickerOptions CurrentClickerOptions() {
 }
 
 void ToggleAutoClicker() {
-    if (g_app.isClicking) {
+    // Ask the engine, not g_app: a run that ended at its click limit is
+    // stopped, even before the status timer has caught up with it.
+    if (g_app.engine->IsClickerActive()) {
         g_app.engine->StopAutoClicker();
         g_app.isClicking = false;
         // Force update after stop
@@ -742,6 +744,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     g_app.isPlaying = false;
                     // A recording started during playback owns the title now.
                     if (!g_app.isRecording) SetWindowTextA(hwnd, "FLOW");
+                    UpdateStatusDisplay();
+                }
+                // The clicker stops by itself once it reaches its click limit.
+                if (g_app.isClicking && g_app.engine && !g_app.engine->IsClickerActive()) {
+                    g_app.isClicking = false;
                     UpdateStatusDisplay();
                 }
             }
