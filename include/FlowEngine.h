@@ -292,9 +292,11 @@ private:
     bool skippedPress[5];                    ///< Left/right/middle/X1/X2 press on FLOW left out, so its release is too
 
     // ===== Auto-Clicker System =====
-    std::atomic<bool> isClicking;            ///< Clicker active flag
+    std::atomic<bool> isClicking;            ///< True from a start until the thread ends
+    std::atomic<bool> stopClicking;          ///< Stop signal for the clicker thread
     std::atomic<DWORD> clickInterval;        ///< Click interval (ms)
     std::thread clickerThread;               ///< Clicker worker thread
+    std::mutex clickerMutex;                 ///< Serialises starting and stopping the clicker
 
     // ===== Macro Playback System =====
     std::atomic<bool> isPlaying;             ///< Playback active flag
@@ -365,7 +367,9 @@ public:
     void StartAutoClicker(DWORD intervalMs = DEFAULT_CLICK_INTERVAL);
     
     /**
-     * @brief Stop the auto-clicker
+     * @brief Stop the auto-clicker and wait for its thread to end
+     * @note Joins the thread even when it has already ended by itself, so the
+     *       next start never meets a finished thread that was never joined.
      */
     void StopAutoClicker();
     
