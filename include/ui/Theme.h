@@ -40,7 +40,7 @@ const COLORREF BG_DIALOG       = RGB(255, 255, 255);
 // Layout (client-area design units at 96 DPI, single-column workflow).
 constexpr int PAD        = 24;
 constexpr int CLIENT_W   = 460;
-constexpr int CLIENT_H   = 770;
+constexpr int CLIENT_H   = 776;
 constexpr int CONTENT_X  = PAD;                 // 24
 constexpr int CONTENT_W  = CLIENT_W - 2 * PAD;  // 412
 constexpr int CRIGHT     = CLIENT_W - PAD;      // 436 (right edge of content)
@@ -77,15 +77,15 @@ constexpr int CLK_BTN_Y     = 496;
 constexpr int ROW_INTERVAL_Y= 554;   // Interval | Jitter
 constexpr int INTERVAL_HELP_Y = 582;
 constexpr int ROW_BUTTON_Y  = 616;   // Button | Clicks
-constexpr int ROW_TARGET_Y  = 650;   // Target | Stop after
+constexpr int ROW_TARGET_Y  = 656;   // Target | Stop after; 40 below, as these pills are 36 tall
 
 // The clicker options sit in two columns: each label at its column's left
 // edge, its control right-aligned to the column's right edge.
 constexpr int CLK_COL1_RIGHT = 204;         // left column controls end here
 constexpr int CLK_COL2_X     = 240;         // right column labels start here
 
-constexpr int FOOT_DIV_Y   = 692;
-constexpr int FOOT_Y       = 706;
+constexpr int FOOT_DIV_Y   = 698;
+constexpr int FOOT_Y       = 712;
 
 // DPI scale factor (1.0 at 96 DPI) of the monitor the main window is on.
 extern double g_scale;
