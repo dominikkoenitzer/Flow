@@ -82,6 +82,18 @@ TEST_CASE("A window past the right edge is pulled back inside") {
     CHECK(p.y == 100);
 }
 
+TEST_CASE("A window grown in place for a higher DPI is lifted above the taskbar") {
+    // Planned at 100% with its foot on the taskbar of a 1440p monitor right of
+    // the primary, then opened at 150% and resized from its top-left corner.
+    // The grown size is roughly the window at 150%.
+    const RECT work = area(1920, 0, 4480, 1392);
+    const int grownW = 714;
+    const int grownH = 1222;
+    const POINT p = ClampIntoArea(3000, 1392 - H, grownW, grownH, work);
+    CHECK(p.x == 3000);
+    CHECK(p.y == 1392 - grownH);
+}
+
 TEST_CASE("A window larger than the work area is pinned to its top-left") {
     // 1366 x 768 with a 40 px taskbar is shorter than the window.
     const RECT work = area(0, 0, 1366, 728);
