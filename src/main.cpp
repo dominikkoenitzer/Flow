@@ -980,13 +980,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         if (posY < work.top) posY = work.top;   // taller than the work area: keep the caption on screen
         if (g_app.hasWinPos) {
             // The monitor the saved rectangle lands on, or the nearest one if
-            // it is gone. Its work area leaves out the taskbar; the whole
-            // desktop stands in only if the monitor cannot be read.
+            // it is gone. The rectangle is moved onto the desktop first, so a
+            // hand-edited position cannot overflow it. The monitor's work area
+            // leaves out the taskbar; the whole desktop stands in only if the
+            // monitor cannot be read.
             int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
             int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
             RECT area = { vx, vy, vx + GetSystemMetrics(SM_CXVIRTUALSCREEN),
                           vy + GetSystemMetrics(SM_CYVIRTUALSCREEN) };
-            RECT saved = { g_app.winX, g_app.winY, g_app.winX + winW, g_app.winY + winH };
+            RECT saved = RectOnDesktop(g_app.winX, g_app.winY, winW, winH, area);
             MONITORINFO mi = {};
             mi.cbSize = sizeof(mi);
             HMONITOR mon = MonitorFromRect(&saved, MONITOR_DEFAULTTONEAREST);
