@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml/badge.svg)](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/dominikkoenitzer/Flow?display_name=tag&label=latest)](https://github.com/dominikkoenitzer/Flow/releases/latest)
-[![tests](https://img.shields.io/badge/tests-83%20passing-00599C)](tests)
+[![tests](https://img.shields.io/badge/tests-86%20passing-00599C)](tests)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?logo=windows&logoColor=white)](#requirements)
 [![Language](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](#build-from-source)
 [![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)](#license)
