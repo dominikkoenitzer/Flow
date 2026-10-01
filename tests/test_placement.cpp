@@ -11,7 +11,10 @@
 
 #include "ui/Placement.h"
 
+#include <climits>
+
 using flow::ui::ClampIntoArea;
+using flow::ui::RectOnDesktop;
 
 namespace {
 
@@ -121,4 +124,29 @@ TEST_CASE("A left monitor set higher than the primary keeps its negative top") {
     const POINT bottomLeft = ClampIntoArea(-1920, 100, W, H, work);
     CHECK(bottomLeft.x == -1920 + 48);
     CHECK(bottomLeft.y == 780 - H);
+}
+
+TEST_CASE("A saved position at the ends of int gives a rectangle on the desktop") {
+    // settings.cfg is plain text, and atoi turns a huge number into INT_MAX or
+    // INT_MIN. Two monitors side by side, the left one at negative x.
+    const RECT desktop = area(-1920, 0, 1920, 1080);
+
+    const RECT atMax = RectOnDesktop(INT_MAX, INT_MAX, W, H, desktop);
+    CHECK(atMax.left == 1920 - W);
+    CHECK(atMax.top == 1080 - H);
+    CHECK(atMax.right == 1920);
+    CHECK(atMax.bottom == 1080);
+
+    const RECT atMin = RectOnDesktop(INT_MIN, INT_MIN, W, H, desktop);
+    CHECK(atMin.left == -1920);
+    CHECK(atMin.top == 0);
+    CHECK(atMin.right == -1920 + W);
+    CHECK(atMin.bottom == H);
+
+    // A position already on the desktop is kept as it is.
+    const RECT kept = RectOnDesktop(-1500, 100, W, H, desktop);
+    CHECK(kept.left == -1500);
+    CHECK(kept.top == 100);
+    CHECK(kept.right == -1500 + W);
+    CHECK(kept.bottom == 100 + H);
 }

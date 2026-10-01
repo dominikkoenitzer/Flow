@@ -28,4 +28,20 @@ inline POINT ClampIntoArea(int x, int y, int w, int h, const RECT& area) {
     return p;
 }
 
+/**
+ * The w x h rectangle at (x, y), moved onto `desktop` first. A saved position
+ * comes from settings.cfg, which can hold any int, and adding the size to one
+ * near INT_MAX would overflow. Once the corner lies on the desktop the sums
+ * cannot.
+ */
+inline RECT RectOnDesktop(int x, int y, int w, int h, const RECT& desktop) {
+    const POINT p = ClampIntoArea(x, y, w, h, desktop);
+    RECT r;
+    r.left = p.x;
+    r.top = p.y;
+    r.right = p.x + w;
+    r.bottom = p.y + h;
+    return r;
+}
+
 }  // namespace flow::ui
