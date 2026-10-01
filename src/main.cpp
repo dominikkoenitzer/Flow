@@ -15,6 +15,7 @@
 #include "ui/Dialogs.h"
 #include "ui/Dpi.h"
 #include "ui/Draw.h"
+#include "ui/Placement.h"
 #include "ui/Theme.h"
 
 #include <windows.h>
@@ -962,8 +963,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     // Size the frame for a DPI with the DPI-aware frame calculation, so the
     // client area is exactly the size we lay out for. Then restore the saved
-    // window position, clamped to the visible desktop so it can never be
-    // stranded off-screen; otherwise center on the primary monitor.
+    // window position, clamped into its monitor's work area so it can never be
+    // stranded off-screen or under the taskbar; otherwise center on the
+    // primary monitor.
     auto planWindow = [&](UINT dpi) {
         SIZE ws = WindowSizeForClient(ScAt(CLIENT_W, dpi), ScAt(CLIENT_H, dpi), style, 0, dpi);
         winW = ws.cx;
@@ -977,15 +979,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         posY = work.top + (work.bottom - work.top - winH) / 2;
         if (posY < work.top) posY = work.top;   // taller than the work area: keep the caption on screen
         if (g_app.hasWinPos) {
+            // The monitor the saved rectangle lands on, or the nearest one if
+            // it is gone. Its work area leaves out the taskbar; the whole
+            // desktop stands in only if the monitor cannot be read.
             int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
             int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-            int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-            int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            posX = g_app.winX; posY = g_app.winY;
-            if (posX < vx) posX = vx;
-            if (posY < vy) posY = vy;
-            if (posX > vx + vw - winW) posX = vx + vw - winW;
-            if (posY > vy + vh - winH) posY = vy + vh - winH;
+            RECT area = { vx, vy, vx + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                          vy + GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+            RECT saved = { g_app.winX, g_app.winY, g_app.winX + winW, g_app.winY + winH };
+            MONITORINFO mi = {};
+            mi.cbSize = sizeof(mi);
+            HMONITOR mon = MonitorFromRect(&saved, MONITOR_DEFAULTTONEAREST);
+            if (mon && GetMonitorInfoW(mon, &mi)) area = mi.rcWork;
+            POINT p = ClampIntoArea(g_app.winX, g_app.winY, winW, winH, area);
+            posX = p.x;
+            posY = p.y;
         }
     };
 
