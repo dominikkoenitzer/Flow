@@ -1,7 +1,8 @@
 /**
  * @file test_placement.cpp
  * @brief ClampIntoArea, which keeps a restored window inside its monitor's
- * work area.
+ * work area, and RectOnDesktop, which builds the saved window rectangle
+ * without overflowing.
  *
  * The window is roughly the main one at 100%: its 460 x 776 client area plus
  * a frame. The work areas are what Windows reports with the taskbar on each
