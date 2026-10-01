@@ -69,7 +69,7 @@ void ShowSettingsMenu(HWND hwnd) {
     // Pop up just below the Settings button
     RECT rcBtn;
     GetWindowRect(GetDlgItem(hwnd, BTN_SETTINGS), &rcBtn);
-    TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN, rcBtn.left, rcBtn.bottom + 4, 0, hwnd, NULL);
+    TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN, rcBtn.left, rcBtn.bottom + Sc(4), 0, hwnd, NULL);
     DestroyMenu(hMenu);
 }
 
