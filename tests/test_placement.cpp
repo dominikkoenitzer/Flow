@@ -66,6 +66,15 @@ TEST_CASE("A taskbar at the top pushes the window below it") {
     CHECK(p.y == 48);
 }
 
+TEST_CASE("A taskbar on the right pulls the window left of it") {
+    // The window would fit the 1920 px screen, but its right edge lies under
+    // a 62 px taskbar.
+    const RECT work = area(0, 0, 1858, 1080);
+    const POINT p = ClampIntoArea(1400, 100, W, H, work);
+    CHECK(p.x == 1858 - W);
+    CHECK(p.y == 100);
+}
+
 TEST_CASE("A window past the right edge is pulled back inside") {
     const RECT work = area(0, 0, 1920, 1032);
     const POINT p = ClampIntoArea(1800, 100, W, H, work);
