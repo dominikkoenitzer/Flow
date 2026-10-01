@@ -1029,6 +1029,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         SIZE ws = WindowSizeForClient(Sc(CLIENT_W), Sc(CLIENT_H), style, 0, windowDpi);
         SetWindowPos(g_app.hwnd, NULL, 0, 0, ws.cx, ws.cy,
                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        // The new size grows from the top-left corner, which can push the
+        // window's foot under the taskbar. Clamp it back into its monitor's
+        // work area, as the saved position is.
+        RECT wr;
+        MONITORINFO mi = {};
+        mi.cbSize = sizeof(mi);
+        HMONITOR mon = MonitorFromWindow(g_app.hwnd, MONITOR_DEFAULTTONEAREST);
+        if (GetWindowRect(g_app.hwnd, &wr) && mon && GetMonitorInfoW(mon, &mi)) {
+            POINT p = ClampIntoArea(wr.left, wr.top, wr.right - wr.left,
+                                    wr.bottom - wr.top, mi.rcWork);
+            if (p.x != wr.left || p.y != wr.top) {
+                SetWindowPos(g_app.hwnd, NULL, p.x, p.y, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
     }
     DragAcceptFiles(g_app.hwnd, TRUE);  // accept .rec files dropped onto the window
 
