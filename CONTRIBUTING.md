@@ -68,7 +68,9 @@ FLOW needs **Administrator privileges** for its global low-level input hooks. La
 
 The engine has a [doctest](https://github.com/doctest/doctest) suite under `tests/`
 covering the humanization jitter, the `.rec` file format (including the guards
-against truncated and corrupt files), and the timing primitives.
+against truncated and corrupt files), the timing primitives, the auto-clicker's
+options and thread lifecycle, and the clamp that keeps a restored window inside
+its work area.
 
 ```
 .\scripts\test.ps1                       # build and run everything

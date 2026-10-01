@@ -115,7 +115,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, coding co
 | `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
 | `src/FlowEngine.cpp` / `include/FlowEngine.h` | UI-agnostic engine (`flow` namespace): recording, playback, auto-clicker, timing, humanization. |
 | `resource.rc` / `FLOW.manifest` | App icon + manifest (admin elevation, visual styles, DPI awareness), embedded via `windres`. |
-| `tests/` | doctest suite over the engine: humanization, the .rec format, timing. |
+| `tests/` | doctest suite over the engine: humanization, the .rec format, timing, the clicker, window placement. |
 | `scripts/build.ps1` | Build script (Release/Debug) wrapping the g++ invocation. |
 | `scripts/test.ps1` | Builds and runs the test suite. |
 | `scripts/package.ps1` | Produces the release artifacts (zip + exe + SHA-256) locally. |
