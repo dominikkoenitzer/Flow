@@ -56,6 +56,7 @@ FLOW needs **Administrator privileges** for its global low-level input hooks. La
 | `src/Hotkeys.cpp` / `include/Hotkeys.h` | The four global hotkeys and key-name formatting. |
 | `include/ui/Theme.h` | The design system: palette, layout grid, DPI scaling. |
 | `src/ui/Dpi.cpp` / `include/ui/Dpi.h` | Per-monitor DPI lookups and frame sizes, so each window follows its monitor's scale. |
+| `include/ui/Placement.h` | Keeps a restored window inside its monitor's work area. |
 | `src/ui/Draw.cpp` / `include/ui/Draw.h` | Anti-aliased GDI+ primitives and the vector glyphs. |
 | `src/ui/Buttons.cpp` / `include/ui/Buttons.h` | The owner-draw buttons, toggles and key fields. |
 | `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
