@@ -2,6 +2,8 @@
 
 **Flexible Low-latency Operations Workflow.** A fast, lightweight input-automation tool for Windows. Record and replay mouse/keyboard macros and run a high-speed auto-clicker, all from a custom-drawn native UI with no external runtime to install.
 
+Download [FLOW.exe](https://github.com/dominikkoenitzer/Flow/releases/download/flow/FLOW.exe) and double-click it. There is nothing to install. If Windows shows "Windows protected your PC", click More info, then Run anyway. The zip and checksums are on the [release page](https://github.com/dominikkoenitzer/Flow/releases/tag/flow).
+
 [![CI](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml/badge.svg)](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/dominikkoenitzer/Flow?display_name=tag&label=latest)](https://github.com/dominikkoenitzer/Flow/releases/latest)
 [![tests](https://img.shields.io/badge/tests-86%20passing-00599C)](tests)
