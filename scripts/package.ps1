@@ -31,7 +31,7 @@ Write-Host "== Packaging $DistName ==" -ForegroundColor Cyan
 if (Test-Path $DistDir) { Remove-Item $DistDir -Recurse -Force }
 New-Item -ItemType Directory -Path $DistDir | Out-Null
 Copy-Item $BuildExe $DistDir
-foreach ($f in @("README.md", "LICENSE", "LICENSE.txt", "LICENSE.md")) {
+foreach ($f in @("LICENSE", "LICENSE.txt", "LICENSE.md")) {
     $p = Join-Path $ProjectRoot $f
     if (Test-Path $p) { Copy-Item $p $DistDir }
 }

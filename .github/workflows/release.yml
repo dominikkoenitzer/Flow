@@ -85,7 +85,6 @@ jobs:
           DIST="FLOW-win64"
           mkdir -p "dist/$DIST"
           cp build/FLOW.exe "dist/$DIST/"
-          cp README.md "dist/$DIST/" 2>/dev/null || true
           cp LICENSE* "dist/$DIST/" 2>/dev/null || true
           (cd dist && zip -r "$DIST.zip" "$DIST")
           (cd dist && sha256sum "$DIST.zip" "$DIST/FLOW.exe" | tee "SHA256SUMS.txt")
