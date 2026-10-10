@@ -1,13 +1,8 @@
-name: ✨ Feature request
+name: Feature request
 description: Suggest a new capability or improvement for FLOW.
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Have an idea? Great. For open-ended ideas or questions, a [Discussion](https://github.com/dominikkoenitzer/Flow/discussions) is often a better fit than an issue.
-
   - type: textarea
     id: problem
     attributes:
