@@ -7,7 +7,7 @@ on:
   push:
     tags:
       # Unversioned rolling release: force-push the `flow` tag to (re)publish.
-      - '*'
+      - 'flow'
   workflow_dispatch:
     inputs:
       tag:
