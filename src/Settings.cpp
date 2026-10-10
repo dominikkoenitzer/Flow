@@ -78,11 +78,18 @@ static std::string SettingsText() {
 void SaveSettings() {
     std::string text = SettingsText();
     if (text == g_savedText) return;
-    std::ofstream f(GetSettingsPath());
+    // Write a temporary file next to the real one and swap it in, so a crash
+    // or a full disk part way through never leaves a half-written file.
+    std::string path = GetSettingsPath();
+    std::string tmp = path + ".tmp";
+    std::ofstream f(tmp);
     if (!f.is_open()) return;
     f << text;
     f.close();
-    if (!f.fail()) g_savedText = text;
+    if (!f.fail() && MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
+        g_savedText = text;
+    else
+        DeleteFileA(tmp.c_str());
 }
 
 void LoadSettings() {
