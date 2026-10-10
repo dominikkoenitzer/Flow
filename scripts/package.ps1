@@ -13,6 +13,7 @@ $DistDir     = Join-Path $DistRoot $DistName
 
 Write-Host "== Building Release ==" -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot "build.ps1") Release
+if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE). Aborting package." }
 if (-not (Test-Path $BuildExe)) { throw "Build did not produce $BuildExe" }
 
 Write-Host "== Verifying the binary is self-contained ==" -ForegroundColor Cyan
