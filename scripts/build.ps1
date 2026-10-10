@@ -49,22 +49,27 @@ Write-Host "  OK Build directory ready" -ForegroundColor Green
 # Compile
 Write-Host "[3/4] Compiling FLOW..." -ForegroundColor Yellow
 
-# First compile the resource file
+# First compile the resource file. It embeds the icon and the manifest that
+# asks for Administrator rights, so the build stops if windres fails.
 $ResourceFile = Join-Path $ProjectRoot "resource.rc"
 $ResourceObj = Join-Path $BuildDir "resource.o"
 
-if (Test-Path $ResourceFile) {
-    Write-Host "  Compiling resources..." -ForegroundColor Gray
-    & windres $ResourceFile -O coff -o $ResourceObj 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  WARNING: Resource compilation failed, continuing without icon" -ForegroundColor Yellow
-        $ResourceObj = $null
-    } else {
-        Write-Host "  OK Resources compiled" -ForegroundColor Green
-    }
-} else {
-    $ResourceObj = $null
+Write-Host "  Compiling resources..." -ForegroundColor Gray
+try {
+    $windresOutput = & windres $ResourceFile -O coff -o $ResourceObj 2>&1
+    $windresFailed = $LASTEXITCODE -ne 0
+} catch {
+    $windresOutput = $_
+    $windresFailed = $true
 }
+if ($windresFailed) {
+    Write-Host "  ERROR: Resource compilation failed!" -ForegroundColor Red
+    Write-Host "  FLOW.exe needs the manifest from resource.rc to ask for Administrator rights." -ForegroundColor Red
+    Write-Host "  Check that windres is in PATH (it ships with MinGW-w64 binutils)." -ForegroundColor Red
+    Write-Host $windresOutput -ForegroundColor Red
+    exit 1
+}
+Write-Host "  OK Resources compiled" -ForegroundColor Green
 
 # Every .cpp under src/, so a new translation unit builds without editing this
 # script. Sorted for a reproducible command line.
@@ -73,11 +78,7 @@ $SourceFiles = @(
         Sort-Object FullName |
         Select-Object -ExpandProperty FullName
 )
-
-# Add resource object if it was compiled successfully
-if ($ResourceObj -and (Test-Path $ResourceObj)) {
-    $SourceFiles += $ResourceObj
-}
+$SourceFiles += $ResourceObj
 
 $OutputExe = Join-Path $OutputDir "FLOW.exe"
 
