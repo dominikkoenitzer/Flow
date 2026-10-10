@@ -715,7 +715,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     break;
             }
             // Every choice, toggle, hotkey change and opened or saved macro
-            // above lands here. SaveSettings writes only what really changed.
+            // above lands here. SaveSettings writes only when something changed.
             SaveSettings();
             break;
         }
@@ -791,7 +791,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_DESTROY: {
             // Remember the window position (ignore the -32000 minimized sentinel).
             // Everything else is saved as it changes, so this writes only if the
-            // window moved.
+            // window moved or there is no file yet.
             RECT wr; GetWindowRect(hwnd, &wr);
             if (wr.left > -30000 && wr.top > -30000) {
                 g_app.winX = wr.left; g_app.winY = wr.top; g_app.hasWinPos = true;
