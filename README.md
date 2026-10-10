@@ -31,7 +31,7 @@ Download [FLOW.exe](https://github.com/dominikkoenitzer/Flow/releases/download/f
 
 Grab the latest build from the [**Releases**](https://github.com/dominikkoenitzer/Flow/releases) page:
 
-- **`FLOW.exe`**, the standalone executable, and the one you probably want. Fully self-contained.
+- [**`FLOW.exe`**](https://github.com/dominikkoenitzer/Flow/releases/download/flow/FLOW.exe), the standalone executable, and the one you probably want. Fully self-contained.
 - **`FLOW-win64.zip`**, the same exe plus this README.
 - **`SHA256SUMS.txt`**, checksums to verify your download.
 
