@@ -89,6 +89,8 @@ jobs:
           cp LICENSE* "dist/$DIST/" 2>/dev/null || true
           (cd dist && zip -r "$DIST.zip" "$DIST")
           (cd dist && sha256sum "$DIST.zip" "$DIST/FLOW.exe" | tee "SHA256SUMS.txt")
+          # The loose FLOW.exe asset by its plain name, so a direct download checks too.
+          (cd "dist/$DIST" && sha256sum FLOW.exe | tee -a ../SHA256SUMS.txt)
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
