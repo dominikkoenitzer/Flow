@@ -75,6 +75,25 @@ All hotkeys are customizable in **Settings → Customize Hotkeys**.
 - Turn on **Settings → Reopen Last Macro on Launch** to have your last macro ready every time you start FLOW.
 - FLOW **remembers its window position** and reopens where you left it.
 
+## Settings and data
+
+FLOW keeps its settings in one plain-text file, `%APPDATA%\FLOW\settings.cfg`: hotkeys, speed, loops, the clicker options, the switches, the path of the last opened or saved macro, and the window position. It reads the file when it starts, writes it as soon as you change a setting, and saves the window position when it closes.
+
+Macros (`.rec` files) are saved only where you choose in the Save dialog. FLOW keeps no copy of them and has no recordings folder of its own. It writes no log files and nothing to the registry.
+
+### Updating
+
+Close FLOW, then download the new [FLOW.exe](https://github.com/dominikkoenitzer/Flow/releases/download/flow/FLOW.exe) over the old one. Your settings stay, since they live in `%APPDATA%\FLOW` and not next to the exe.
+
+### Removing FLOW
+
+1. Close FLOW.
+2. Delete `FLOW.exe`.
+3. Delete the folder `%APPDATA%\FLOW`. Typing `%APPDATA%` into the Explorer address bar takes you there.
+4. Delete any `.rec` files you saved, if you no longer want them.
+
+There is nothing else to uninstall.
+
 ## Build from source
 
 The toolchain is **MinGW-w64 g++** (C++17) from MSYS2, the same one CI uses. These steps set it up on a fresh Windows PC. Run them in PowerShell, except the `pacman` line.
