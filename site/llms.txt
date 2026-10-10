@@ -1,0 +1,21 @@
+# Flow
+
+> Records mouse and keyboard input on Windows and plays it back, with a separate auto-clicker.
+
+Flow is one file, `FLOW.exe`, for 64-bit Windows 10 and 11. It needs no install and starts as administrator, so it can record and replay input in elevated windows too. It has no command line and no network access.
+
+- Hotkeys, changeable in Settings, then Customize Hotkeys: F8 starts or stops recording, F9 starts or stops playback, F6 starts or stops the auto-clicker, Pause stops everything.
+- Playback runs at 0.1 to 100 times the recorded speed, 1 to 999 times or until stopped, with optional random timing variation.
+- Auto-clicker: interval 1 to 10000 ms, left, right or middle button, single, double or triple clicks, at the cursor or at a fixed point.
+- Recordings are saved as binary `.rec` files. Settings live in `%APPDATA%\FLOW\settings.cfg`, a plain `key=value` file.
+
+## Download
+
+- [Flow for Windows](/download/windows): `FLOW.exe`, the latest build
+
+## Agent skill
+
+- [Flow skill](/skill/flow.zip): a zipped skill folder that teaches an AI assistant how to use Flow
+- [SKILL.md](/skill/flow/SKILL.md): the skill's instructions as plain text
+- [The .rec format](/skill/flow/references/rec-format.md): byte layout of a saved recording
+- [Settings keys](/skill/flow/references/settings.md): every key in settings.cfg with its range and default

@@ -1,0 +1,5 @@
+{
+  "redirects": [
+    { "source": "/download/windows", "destination": "https://github.com/dominikkoenitzer/Flow/releases/download/flow/FLOW.exe", "permanent": false }
+  ]
+}
