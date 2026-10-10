@@ -30,7 +30,7 @@ You can expect an acknowledgement within a few days. Once a fix is ready, it wil
 
 FLOW is, by design, a privileged input-automation tool. The following are inherent to that design and are **not** considered vulnerabilities:
 
-- **It requires Administrator rights.** Global low-level input hooks (`WH_MOUSE_LL` / `WH_KEYBOARD_LL`) are only permitted for elevated processes.
+- **It requires Administrator rights.** Windows does not let a normal process replay input into an elevated window or record input while one has focus, so FLOW runs elevated to work in every window.
 - **Antivirus / SmartScreen warnings.** The binary is unsigned and uses global input hooks, so some engines flag it. That is a false positive inherent to this category of software. Verify the published SHA-256 if you want assurance the download is intact.
 - **It can synthesize input.** Recording and replaying keystrokes/clicks is the entire purpose of the tool.
 

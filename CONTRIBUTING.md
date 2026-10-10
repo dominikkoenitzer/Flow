@@ -105,4 +105,4 @@ GUI, which still need manual verification.
 
 ## Reporting bugs & requesting features
 
-Use the [issue templates](https://github.com/dominikkoenitzer/Flow/issues/new/choose). For anything that isn't a concrete bug or request, start a [Discussion](https://github.com/dominikkoenitzer/Flow/discussions). For security issues, follow [SECURITY.md](SECURITY.md), and please don't open a public issue.
+Use the [issue templates](https://github.com/dominikkoenitzer/Flow/issues/new/choose). For security issues, follow [SECURITY.md](SECURITY.md), and please don't open a public issue.
