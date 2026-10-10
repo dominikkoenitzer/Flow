@@ -77,23 +77,45 @@ All hotkeys are customizable in **Settings → Customize Hotkeys**.
 
 ## Build from source
 
-The toolchain is **MinGW-w64 g++** (C++17). With MinGW on your `PATH`:
+The toolchain is **MinGW-w64 g++** (C++17) from MSYS2, the same one CI uses. These steps set it up on a fresh Windows PC. Run them in PowerShell, except the `pacman` line.
+
+1. Install Git and MSYS2 (MSYS2 goes to `C:\msys64`):
+
+   ```powershell
+   winget install --id Git.Git --exact
+   winget install --id MSYS2.MSYS2 --exact
+   ```
+
+2. Open **MSYS2 UCRT64** from the Start menu (or run `C:\msys64\ucrt64.exe`) and install g++ and `windres`:
+
+   ```sh
+   pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-binutils
+   ```
+
+3. Back in PowerShell, add `C:\msys64\ucrt64\bin` (where `g++` and `windres` live) to your user `PATH`:
+
+   ```powershell
+   [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';C:\msys64\ucrt64\bin', 'User')
+   ```
+
+4. Open a new PowerShell window. A terminal that was open during the installs does not see Git or the new `PATH`. Then check the toolchain, clone and build:
+
+   ```powershell
+   g++ --version
+   git clone https://github.com/dominikkoenitzer/Flow.git
+   cd Flow
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
+   ```
+
+The exe lands in `build\Release\FLOW.exe`. Add `Debug` to the last line for a debug build in `build\Debug\FLOW.exe`. `-ExecutionPolicy Bypass` lets this one script run on a PC where scripts are off by default, without changing that setting. If your PC already runs local scripts, `.\scripts\build.ps1` is enough. The script stops with an error if `windres` fails, since the exe needs the embedded manifest to ask for Administrator rights.
+
+Or the raw invocation, in PowerShell from the `Flow` folder. It is the build CI runs:
 
 ```powershell
-# Release (default) -> build\Release\FLOW.exe
-.\scripts\build.ps1
-
-# Debug -> build\Debug\FLOW.exe
-.\scripts\build.ps1 Debug
-```
-
-Or the raw invocation:
-
-```
+New-Item -ItemType Directory -Force build | Out-Null
 windres resource.rc -O coff -o build/resource.o
-g++ -std=c++17 -O3 -mwindows -I include -o build/FLOW.exe \
-    src/*.cpp src/ui/*.cpp build/resource.o \
-    -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
+$src = (Get-ChildItem src -Recurse -Filter *.cpp).FullName
+g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -Werror -mwindows -I include -o build/FLOW.exe $src build/resource.o -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
 ```
 
 The `-static` flag is required so the resulting exe carries the MinGW runtime
