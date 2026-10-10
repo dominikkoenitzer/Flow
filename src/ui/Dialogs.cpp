@@ -214,6 +214,11 @@ LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM 
                         LayoutHotkeyDialog))
         return TRUE;
     switch (msg) {
+        case WM_CTLCOLORDLG: {
+            // A dialog paints its background with the brush returned here, not the class brush.
+            static HBRUSH dlgB = CreateSolidBrush(BG_PRIMARY);
+            return (INT_PTR)dlgB;
+        }
         case WM_CTLCOLORSTATIC: {
             static HBRUSH bgB = CreateSolidBrush(BG_PRIMARY);
             int id = GetDlgCtrlID((HWND)lParam);
@@ -461,6 +466,11 @@ LRESULT CALLBACK AboutDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM l
                         LayoutAboutDialog))
         return TRUE;
     switch (msg) {
+        case WM_CTLCOLORDLG: {
+            // A dialog paints its background with the brush returned here, not the class brush.
+            static HBRUSH dlgB = CreateSolidBrush(BG_PRIMARY);
+            return (INT_PTR)dlgB;
+        }
         case WM_CTLCOLORSTATIC: {
             static HBRUSH bgB = CreateSolidBrush(BG_PRIMARY);
             int id = GetDlgCtrlID((HWND)lParam);
