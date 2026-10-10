@@ -29,9 +29,9 @@ Write-Host ""
 Write-Host "[1/4] Checking for g++ compiler..." -ForegroundColor Yellow
 try {
     $gccVersion = g++ --version 2>&1 | Select-Object -First 1
-    Write-Host "  ✓ Found: $gccVersion" -ForegroundColor Green
+    Write-Host "  OK Found: $gccVersion" -ForegroundColor Green
 } catch {
-    Write-Host "  ✗ ERROR: g++ not found in PATH!" -ForegroundColor Red
+    Write-Host "  ERROR: g++ not found in PATH!" -ForegroundColor Red
     Write-Host "  Please install MinGW-w64 and add it to PATH." -ForegroundColor Red
     exit 1
 }
@@ -44,7 +44,7 @@ if (-not (Test-Path $BuildDir)) {
 if (-not (Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir | Out-Null
 }
-Write-Host "  ✓ Build directory ready" -ForegroundColor Green
+Write-Host "  OK Build directory ready" -ForegroundColor Green
 
 # Compile
 Write-Host "[3/4] Compiling FLOW..." -ForegroundColor Yellow
@@ -57,10 +57,10 @@ if (Test-Path $ResourceFile) {
     Write-Host "  Compiling resources..." -ForegroundColor Gray
     & windres $ResourceFile -O coff -o $ResourceObj 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ⚠ Resource compilation failed, continuing without icon" -ForegroundColor Yellow
+        Write-Host "  WARNING: Resource compilation failed, continuing without icon" -ForegroundColor Yellow
         $ResourceObj = $null
     } else {
-        Write-Host "  ✓ Resources compiled" -ForegroundColor Green
+        Write-Host "  OK Resources compiled" -ForegroundColor Green
     }
 } else {
     $ResourceObj = $null
@@ -113,13 +113,13 @@ Write-Host "  Command: $CompileCommand" -ForegroundColor DarkGray
 try {
     $output = & g++ $CompileArgs 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ✗ Compilation failed!" -ForegroundColor Red
+        Write-Host "  ERROR: Compilation failed!" -ForegroundColor Red
         Write-Host $output -ForegroundColor Red
         exit 1
     }
-    Write-Host "  ✓ Compilation successful" -ForegroundColor Green
+    Write-Host "  OK Compilation successful" -ForegroundColor Green
 } catch {
-    Write-Host "  ✗ Compilation error: $_" -ForegroundColor Red
+    Write-Host "  ERROR: Compilation error: $_" -ForegroundColor Red
     exit 1
 }
 
@@ -128,10 +128,10 @@ Write-Host "[4/4] Verifying output..." -ForegroundColor Yellow
 if (Test-Path $OutputExe) {
     $fileSize = (Get-Item $OutputExe).Length
     $fileSizeKB = [math]::Round($fileSize / 1KB, 2)
-    Write-Host "  ✓ Executable created: $OutputExe" -ForegroundColor Green
+    Write-Host "  OK Executable created: $OutputExe" -ForegroundColor Green
     Write-Host "  Size: $fileSizeKB KB" -ForegroundColor Gray
 } else {
-    Write-Host "  ✗ Executable not found!" -ForegroundColor Red
+    Write-Host "  ERROR: Executable not found!" -ForegroundColor Red
     exit 1
 }
 
