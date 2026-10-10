@@ -37,9 +37,14 @@ static std::wstring Utf8ToWide(const std::string& s) {
     return w;
 }
 
-void SaveSettings() {
-    std::ofstream f(GetSettingsPath());
-    if (!f.is_open()) return;
+// The settings as the file last held them: as read at start, or as last
+// written. SaveSettings compares against it, so a session that changes nothing
+// never writes, and a hand edit made while FLOW runs survives a plain close.
+static std::string g_savedText;
+
+// The file's contents for the settings in g_app.
+static std::string SettingsText() {
+    std::ostringstream f;
     f << "playbackSpeed=" << g_app.playbackSpeed << "\n";
     f << "clickInterval=" << g_app.clickInterval << "\n";
     f << "clickButton=" << g_app.clickButton << "\n";
@@ -67,6 +72,17 @@ void SaveSettings() {
         f << "winX=" << g_app.winX << "\n";
         f << "winY=" << g_app.winY << "\n";
     }
+    return f.str();
+}
+
+void SaveSettings() {
+    std::string text = SettingsText();
+    if (text == g_savedText) return;
+    std::ofstream f(GetSettingsPath());
+    if (!f.is_open()) return;
+    f << text;
+    f.close();
+    if (!f.fail()) g_savedText = text;
 }
 
 void LoadSettings() {
@@ -142,6 +158,7 @@ void LoadSettings() {
             g_app.winY = atoi(val.c_str()); g_app.hasWinPos = true;
         }
     }
+    g_savedText = SettingsText();
 }
 
 }  // namespace flow::ui

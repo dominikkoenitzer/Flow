@@ -418,6 +418,7 @@ LRESULT CALLBACK TargetFieldProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id
                     g_app.hasClickPoint = true;
                     g_app.clickAtPoint = true;
                     PushClickerOptions();
+                    SaveSettings();
                 }
                 InvalidateRect(h, NULL, FALSE);
             }
@@ -637,6 +638,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 else if (id == EDIT_INTERVAL) ApplyIntervalEdit(hwnd);
                 else if (id == EDIT_JITTER) ApplyJitterEdit(hwnd);
                 else if (id == EDIT_CLICK_LIMIT) ApplyClickLimitEdit(hwnd);
+                SaveSettings();
                 InvalidateRect(hwnd, NULL, FALSE);   // clear focus ring
                 break;
             }
@@ -712,6 +714,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     ShowAboutDialog(hwnd);
                     break;
             }
+            // Every choice, toggle, hotkey change and opened or saved macro
+            // above lands here. SaveSettings writes only what really changed.
+            SaveSettings();
             break;
         }
 
@@ -768,6 +773,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (DragQueryFileW(drop, 0, path, MAX_PATH) && g_app.engine) {
                 if (g_app.engine->LoadMacro(path)) {
                     g_app.lastMacroPath = path;
+                    SaveSettings();
                     UpdateStatusDisplay();
                 } else {
                     MessageBoxW(hwnd, L"That file isn't a valid FLOW macro (.rec).",
@@ -784,6 +790,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_DESTROY: {
             // Remember the window position (ignore the -32000 minimized sentinel).
+            // Everything else is saved as it changes, so this writes only if the
+            // window moved.
             RECT wr; GetWindowRect(hwnd, &wr);
             if (wr.left > -30000 && wr.top > -30000) {
                 g_app.winX = wr.left; g_app.winY = wr.top; g_app.hasWinPos = true;
