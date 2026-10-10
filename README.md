@@ -89,8 +89,10 @@ The toolchain is **MinGW-w64 g++** (C++17) from MSYS2, the same one CI uses. The
 2. Open **MSYS2 UCRT64** from the Start menu (or run `C:\msys64\ucrt64.exe`) and install g++ and `windres`:
 
    ```sh
-   pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-binutils
+   pacman -Syu --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-binutils
    ```
+
+   If pacman asks you to close the window, close it, open MSYS2 UCRT64 again and run the same line again.
 
 3. Back in PowerShell, add `C:\msys64\ucrt64\bin` (where `g++` and `windres` live) to your user `PATH`:
 
