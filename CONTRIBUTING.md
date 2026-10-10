@@ -10,6 +10,8 @@ Thanks for your interest in FLOW. This is a small, focused Windows-only project,
 - **MinGW-w64 g++ (C++17)** on your `PATH`. The CI and releases use the MSYS2 `UCRT64` toolchain (`mingw-w64-ucrt-x86_64-gcc`); a matching local install is recommended. MSVC is **not** supported.
 - `windres` (ships with MinGW/MSYS2) to embed the icon + manifest.
 
+For a setup from scratch on a fresh Windows PC, follow [Build from source](README.md#build-from-source) in the README.
+
 Verify your toolchain:
 
 ```powershell
@@ -27,13 +29,13 @@ windres --version
 .\scripts\build.ps1 Debug
 ```
 
-The raw invocation (what the script and CI run) is:
+The raw invocation (what the script and CI run), in PowerShell from the repo folder, is:
 
-```
+```powershell
+New-Item -ItemType Directory -Force build | Out-Null
 windres resource.rc -O coff -o build/resource.o
-g++ -std=c++17 -O3 -mwindows -I include -o build/FLOW.exe \
-    src/*.cpp src/ui/*.cpp build/resource.o \
-    -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
+$src = (Get-ChildItem src -Recurse -Filter *.cpp).FullName
+g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -Werror -mwindows -I include -o build/FLOW.exe $src build/resource.o -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
 ```
 
 In VS Code, **Run Build Task** (`Ctrl+Shift+B`) runs the same thing.
