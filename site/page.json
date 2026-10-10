@@ -1,53 +1,148 @@
 {
   "slug": "flow",
   "name": "Flow",
+  "url": "https://get-flow-app.vercel.app/",
   "description": "Record a task once with your mouse and keyboard, and Flow repeats it for you. A macro recorder and auto-clicker for Windows.",
   "colours": {
-    "light": { "accent": "#2f5ebc", "accent-hover": "#284fa0", "accent-ink": "#2f5ebc", "band": "#e5ecf8", "tile": "#eef3fb", "stage": "#e9eff9" },
-    "dark": { "accent": "#3366cc", "accent-hover": "#3f73da", "accent-ink": "#a9c5fc", "band": "#141b2b", "tile": "#19223a", "stage": "#161d2c" }
+    "light": {
+      "accent": "#2f5ebc",
+      "accent-hover": "#284fa0",
+      "accent-ink": "#2f5ebc",
+      "band": "#e5ecf8",
+      "tile": "#eef3fb",
+      "stage": "#e9eff9"
+    },
+    "dark": {
+      "accent": "#3366cc",
+      "accent-hover": "#3f73da",
+      "accent-ink": "#a9c5fc",
+      "band": "#141b2b",
+      "tile": "#19223a",
+      "stage": "#161d2c"
+    }
   },
-  "platforms": { "windows": "Windows" },
+  "platforms": {
+    "windows": "Windows"
+  },
   "hero": {
     "lede": "Record a task once with your mouse and keyboard, and Flow repeats it for you. A macro recorder and auto-clicker in one small file.",
-    "notes": ["Windows 10 and 11, 64-bit. Nothing to install.", "If Windows says it protected your PC, click More info, then Run anyway."],
+    "notes": [
+      "Windows 10 and 11, 64-bit. Nothing to install.",
+      "If Windows says it protected your PC, click More info, then Run anyway."
+    ],
     "away": "Flow runs on Windows. Open this page on your PC to download it.",
-    "image": { "name": "hero", "w": 694, "h": 1203, "dark": false, "portrait": true, "alt": "Flow's window with Record, Play and the auto-clicker, a macro of 1098 events loaded" }
+    "image": {
+      "name": "hero",
+      "w": 694,
+      "h": 1203,
+      "dark": false,
+      "portrait": true,
+      "alt": "Flow's window with Record, Play and the auto-clicker, a macro of 1098 events loaded"
+    }
   },
   "features": [
     {
       "label": "Record",
       "title": "Record mouse and keyboard",
-      "body": ["Press <kbd>F8</kbd> and Flow records mouse moves, clicks, wheel scrolling and keystrokes, timed to the microsecond. Its own hotkeys stay out of the recording."],
-      "main": { "name": "f1", "w": 694, "h": 1203, "dark": false, "portrait": true, "alt": "Flow recording, with 310 events in 6.7 seconds" },
-      "detail": { "name": "c1", "w": 634, "h": 265, "dark": false }
+      "body": [
+        "Press <kbd>F8</kbd> and Flow records mouse moves, clicks, wheel scrolling and keystrokes, timed to the microsecond. Its own hotkeys stay out of the recording."
+      ],
+      "main": {
+        "name": "f1",
+        "w": 694,
+        "h": 1203,
+        "dark": false,
+        "portrait": true,
+        "alt": "Flow recording, with 310 events in 6.7 seconds"
+      },
+      "detail": {
+        "name": "c1",
+        "w": 634,
+        "h": 265,
+        "dark": false
+      }
     },
     {
       "label": "Playback",
       "title": "Replay at the speed you need",
-      "body": ["Play a macro at 0.1x to 100x, for 1 to 999 loops or until you stop it. Humanize timing adds a small random variation to each delay."],
-      "main": { "name": "f2", "w": 694, "h": 1203, "dark": false, "portrait": true, "alt": "Flow playing a macro at speed 2 for 5 loops" },
-      "detail": { "name": "c2", "w": 634, "h": 355, "dark": false }
+      "body": [
+        "Play a macro at 0.1x to 100x, for 1 to 999 loops or until you stop it. Humanize timing adds a small random variation to each delay."
+      ],
+      "main": {
+        "name": "f2",
+        "w": 694,
+        "h": 1203,
+        "dark": false,
+        "portrait": true,
+        "alt": "Flow playing a macro at speed 2 for 5 loops"
+      },
+      "detail": {
+        "name": "c2",
+        "w": 634,
+        "h": 355,
+        "dark": false
+      }
     },
     {
       "label": "Clicker",
       "title": "Click at a set interval",
-      "body": ["Click every 1 to 10,000 ms with the left, right or middle button, as a single, double or triple click.", "Click at the cursor or at a fixed point you drag out from the Target field, and add jitter or a click limit."],
-      "main": { "name": "f3", "w": 694, "h": 1203, "dark": false, "portrait": true, "alt": "The auto-clicker running every 50 ms with a fixed target" },
-      "detail": { "name": "c3", "w": 634, "h": 225, "dark": false }
+      "body": [
+        "Click every 1 to 10,000 ms with the left, right or middle button, as a single, double or triple click.",
+        "Click at the cursor or at a fixed point you drag out from the Target field, and add jitter or a click limit."
+      ],
+      "main": {
+        "name": "f3",
+        "w": 694,
+        "h": 1203,
+        "dark": false,
+        "portrait": true,
+        "alt": "The auto-clicker running every 50 ms with a fixed target"
+      },
+      "detail": {
+        "name": "c3",
+        "w": 634,
+        "h": 225,
+        "dark": false
+      }
     },
     {
       "label": "Hotkeys",
       "title": "Hotkeys that work anywhere",
-      "body": ["<kbd>F8</kbd> records, <kbd>F9</kbd> plays, <kbd>F6</kbd> starts the clicker and <kbd>Pause</kbd> stops everything, also while another window has focus.", "Rebind any of them to F1 to F12, A to Z or 0 to 9."],
-      "main": { "name": "f4", "w": 694, "h": 708, "dark": false, "portrait": true, "alt": "The Customize Hotkeys dialog with F8, F9, F6 and Pause" },
+      "body": [
+        "<kbd>F8</kbd> records, <kbd>F9</kbd> plays, <kbd>F6</kbd> starts the clicker and <kbd>Pause</kbd> stops everything, also while another window has focus.",
+        "Rebind any of them to F1 to F12, A to Z or 0 to 9."
+      ],
+      "main": {
+        "name": "f4",
+        "w": 694,
+        "h": 708,
+        "dark": false,
+        "portrait": true,
+        "alt": "The Customize Hotkeys dialog with F8, F9, F6 and Pause"
+      },
       "detail": null
     },
     {
       "label": "Macros",
       "title": "Save a macro, open it later",
-      "body": ["Save a recording as a <code>.rec</code> file, then open it again or drop it onto the window. With Reopen Last Macro on Launch, Flow loads it when it starts."],
-      "main": { "name": "f5", "w": 749, "h": 1196, "dark": false, "portrait": true, "alt": "The Settings menu with Reopen Last Macro on Launch ticked" },
-      "detail": { "name": "c5", "w": 389, "h": 230, "dark": false, "style": "width: 34%" }
+      "body": [
+        "Save a recording as a <code>.rec</code> file, then open it again or drop it onto the window. With Reopen Last Macro on Launch, Flow loads it when it starts."
+      ],
+      "main": {
+        "name": "f5",
+        "w": 749,
+        "h": 1196,
+        "dark": false,
+        "portrait": true,
+        "alt": "The Settings menu with Reopen Last Macro on Launch ticked"
+      },
+      "detail": {
+        "name": "c5",
+        "w": 389,
+        "h": 230,
+        "dark": false,
+        "style": "width: 34%"
+      }
     }
   ],
   "new": {
@@ -69,32 +164,101 @@
   ],
   "privacy": {
     "title": "No network at all",
-    "body": ["Flow has no network code and sends nothing anywhere. Your recordings stay in the files you save."]
+    "body": [
+      "Flow has no network code and sends nothing anywhere. Your recordings stay in the files you save."
+    ]
   },
   "data": {
     "title": "One settings file",
-    "body": ["Your hotkeys and options live in one plain text file, <code>%APPDATA%\\FLOW\\settings.cfg</code>. Macros are <code>.rec</code> files, saved only where you choose."]
+    "body": [
+      "Your hotkeys and options live in one plain text file, <code>%APPDATA%\\FLOW\\settings.cfg</code>. Macros are <code>.rec</code> files, saved only where you choose."
+    ]
   },
   "keys": [
-    ["F8", "Start or stop recording"],
-    ["F9", "Start or stop playback"],
-    ["F6", "Start or stop the auto-clicker"],
-    ["Pause", "Stop everything"]
+    [
+      "F8",
+      "Start or stop recording"
+    ],
+    [
+      "F9",
+      "Start or stop playback"
+    ],
+    [
+      "F6",
+      "Start or stop the auto-clicker"
+    ],
+    [
+      "Pause",
+      "Stop everything"
+    ]
   ],
   "keys_note": "All four work in any window and can be changed in Settings, Customize Hotkeys.",
   "basics": [
-    { "title": "Get started", "steps": ["Download FLOW.exe.", "Double-click it and click Yes when Windows asks for permission.", "Press <kbd>F8</kbd>, do the task once, press <kbd>F8</kbd> again."] },
-    { "title": "Updates", "body": ["Close Flow and download the new FLOW.exe over the old one. Your settings stay in <code>%APPDATA%\\FLOW</code>."] },
-    { "title": "Removing it", "body": ["Close Flow, delete FLOW.exe and the <code>%APPDATA%\\FLOW</code> folder, and any <code>.rec</code> files you no longer want."] }
+    {
+      "title": "Get started",
+      "steps": [
+        "Download FLOW.exe.",
+        "Double-click it and click Yes when Windows asks for permission.",
+        "Press <kbd>F8</kbd>, do the task once, press <kbd>F8</kbd> again."
+      ]
+    },
+    {
+      "title": "Updates",
+      "body": [
+        "Close Flow and download the new FLOW.exe over the old one. Your settings stay in <code>%APPDATA%\\FLOW</code>."
+      ]
+    },
+    {
+      "title": "Removing it",
+      "body": [
+        "Close Flow, delete FLOW.exe and the <code>%APPDATA%\\FLOW</code> folder, and any <code>.rec</code> files you no longer want."
+      ]
+    }
   ],
   "faq": [
-    { "q": "Is Flow free?", "a": ["Yes. It is a free download with no account."] },
-    { "q": "Why does Windows say it protected my PC?", "a": ["Flow is not signed with a paid certificate, so Windows warns about a new download. Click More info, then Run anyway.", "To check that the file is intact, compare its hash with the <a href=\"/download/checksums\">checksum file</a>: <code>Get-FileHash .\\FLOW.exe</code>."] },
-    { "q": "Why does Flow ask for Administrator rights?", "a": ["Windows blocks a normal program from sending input to, or recording input from, a window that runs as Administrator, such as Task Manager or an installer. With the rights, Flow works in every window."] },
-    { "q": "Where does Flow keep my data?", "a": ["In <code>%APPDATA%\\FLOW\\settings.cfg</code>. Your macros are only where you save them, and nothing goes over the network."] },
-    { "q": "My antivirus flags Flow. Is that a problem?", "a": ["Some engines flag every tool that records and replays input. It is a false positive. The <a href=\"/download/checksums\">checksum file</a> tells you that you have the released file."] },
-    { "q": "Is there a zip instead of the exe?", "a": ["Yes: <a href=\"/download/zip\">FLOW-win64.zip</a> holds the same exe and the license."] }
+    {
+      "q": "Is Flow free?",
+      "a": [
+        "Yes. It is a free download with no account."
+      ]
+    },
+    {
+      "q": "Why does Windows say it protected my PC?",
+      "a": [
+        "Flow is not signed with a paid certificate, so Windows warns about a new download. Click More info, then Run anyway.",
+        "To check that the file is intact, compare its hash with the <a href=\"/download/checksums\">checksum file</a>: <code>Get-FileHash .\\FLOW.exe</code>."
+      ]
+    },
+    {
+      "q": "Why does Flow ask for Administrator rights?",
+      "a": [
+        "Windows blocks a normal program from sending input to, or recording input from, a window that runs as Administrator, such as Task Manager or an installer. With the rights, Flow works in every window."
+      ]
+    },
+    {
+      "q": "Where does Flow keep my data?",
+      "a": [
+        "In <code>%APPDATA%\\FLOW\\settings.cfg</code>. Your macros are only where you save them, and nothing goes over the network."
+      ]
+    },
+    {
+      "q": "My antivirus flags Flow. Is that a problem?",
+      "a": [
+        "Some engines flag every tool that records and replays input. It is a false positive. The <a href=\"/download/checksums\">checksum file</a> tells you that you have the released file."
+      ]
+    },
+    {
+      "q": "Is there a zip instead of the exe?",
+      "a": [
+        "Yes: <a href=\"/download/zip\">FLOW-win64.zip</a> holds the same exe and the license."
+      ]
+    }
   ],
-  "closing": { "title": "Get Flow", "sub": "Free for Windows 10 and 11. One file, nothing to install." },
-  "footer": ["For AI assistants: <a href=\"/skill/flow.zip\">the Flow skill</a> and <a href=\"/llms.txt\">llms.txt</a>."]
+  "closing": {
+    "title": "Get Flow",
+    "sub": "Free for Windows 10 and 11. One file, nothing to install."
+  },
+  "footer": [
+    "For AI assistants: <a href=\"/skill/flow.zip\">the Flow skill</a> and <a href=\"/llms.txt\">llms.txt</a>."
+  ]
 }
