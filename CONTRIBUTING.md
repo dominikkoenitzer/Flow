@@ -29,7 +29,7 @@ windres --version
 .\scripts\build.ps1 Debug
 ```
 
-The raw invocation (what the script and CI run), in PowerShell from the repo folder, is:
+The raw invocation CI runs, in PowerShell from the repo folder, is below. The script compiles the same sources with the same libraries but without `-Wall -Wextra -Werror`:
 
 ```powershell
 New-Item -ItemType Directory -Force build | Out-Null
@@ -38,7 +38,7 @@ $src = (Get-ChildItem src -Recurse -Filter *.cpp).FullName
 g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -Werror -mwindows -I include -o build/FLOW.exe $src build/resource.o -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
 ```
 
-In VS Code, **Run Build Task** (`Ctrl+Shift+B`) runs the same thing.
+In VS Code, **Run Build Task** (`Ctrl+Shift+B`) builds with `-Wall -Wextra`, but without `-Werror` and `-DNDEBUG`.
 
 ### `-static` is mandatory
 
@@ -98,7 +98,7 @@ GUI, which still need manual verification.
 ## Submitting changes
 
 1. **Branch** off `main`.
-2. **Build cleanly** (`.\scripts\build.ps1`) with no new warnings and **run the tests** (`.\scripts\test.ps1`). Engine changes should come with a test. GUI changes have no automated coverage, so **run the elevated app** and confirm the affected feature actually works.
+2. **Build cleanly**: the raw invocation above must compile without warnings, because CI treats every warning as an error. Then **run the tests** (`.\scripts\test.ps1`). Engine changes should come with a test. GUI changes have no automated coverage, so **run the elevated app** and confirm the affected feature actually works.
 3. Keep commits focused with clear messages.
 4. Open a pull request and fill in the template. Describe what you changed and how you tested it.
 5. If you changed behavior, update [`README.md`](README.md) to match.
