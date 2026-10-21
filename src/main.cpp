@@ -62,6 +62,11 @@ void ShowSettingsMenu(HWND hwnd) {
     AppendMenuW(hMenu, MF_STRING | (g_app.reopenLastMacro ? MF_CHECKED : 0),
                 MENU_REOPEN_LAST, L"Reopen Last Macro on Launch");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+    // Editing the recording waits until nothing is recording or playing it.
+    const bool idle = !g_app.isRecording && !g_app.isPlaying;
+    const bool hasEvents = g_app.engine && g_app.engine->GetEventCount() > 0;
+    AppendMenuW(hMenu, MF_STRING | (idle && hasEvents ? 0 : MF_GRAYED),
+                MENU_TRIM_TIMING, L"Trim && Timing…");
     AppendMenuW(hMenu, MF_STRING, MENU_CLEAR_RECORDING, L"Clear Recording");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(hMenu, MF_STRING, MENU_ABOUT, L"About FLOW");
@@ -705,6 +710,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     break;
                 case MENU_REOPEN_LAST:
                     g_app.reopenLastMacro = !g_app.reopenLastMacro;
+                    break;
+                case MENU_TRIM_TIMING:
+                    if (ShowTrimTimingDialog(hwnd)) UpdateStatusDisplay();
                     break;
                 case MENU_CLEAR_RECORDING:
                     if (g_app.engine) g_app.engine->ClearRecording();

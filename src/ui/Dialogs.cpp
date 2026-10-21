@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace flow::ui {
 
@@ -565,6 +566,272 @@ void ShowAboutDialog(HWND hwnd) {
     EnableWindow(hwnd, TRUE);
     SetFocus(hwnd);
     DeleteUiFonts(s_aboutScale.fonts);   // the dialog and its controls are gone
+}
+
+// ---------------------------------------------------------------------------
+// Trim & Timing dialog
+// ---------------------------------------------------------------------------
+
+#define IDC_TT_TITLE   9200
+#define IDC_TT_SUB     9201
+#define IDC_TT_L_START 9202
+#define IDC_TT_L_END   9203
+#define IDC_TT_L_GAP   9204
+#define IDC_TT_START   9205
+#define IDC_TT_END     9206
+#define IDC_TT_GAP     9207
+#define IDC_TT_HINT    9208
+#define IDC_TT_RESULT  9209
+#define IDC_TT_APPLY   9210
+#define IDC_TT_CANCEL  9211
+
+// Trim & Timing layout, in design units (scaled via Sc). Each number sits in
+// a pill painted behind it, as on the main window.
+static const int TT_W = 460, TT_H = 412, TT_PAD = 28;
+static const int TT_ROW_TOP = 104, TT_ROW_H = 54, TT_PILL_W = 150, TT_PILL_H = 38;
+static const int TT_PILL_X = TT_W - TT_PAD - TT_PILL_W;
+static const int TT_BTN_Y = 344, TT_BTN_H = 44;
+
+static DialogScale s_trimScale;
+static std::vector<InputEvent> s_trimSource;   // the recording as the dialog opened
+static std::vector<InputEvent> s_trimResult;   // what Apply would make of it
+static bool s_trimApplied = false;
+
+static void LayoutTrimDialog(HWND hDlg) {
+    const int textW = TT_W - 2 * TT_PAD;
+    const int labelW = TT_PILL_X - TT_PAD;
+    const int editX = TT_PILL_X + 12, editW = TT_PILL_W - 24;
+    const DlgPlace places[] = {
+        { IDC_TT_TITLE,   TT_PAD, 20, textW, 36, g_fonts.wordmark },
+        { IDC_TT_SUB,     TT_PAD, 62, textW, 24, g_fonts.small_ },
+        { IDC_TT_L_START, TT_PAD, TT_ROW_TOP + 10,                labelW, 24, g_fonts.body },
+        { IDC_TT_L_END,   TT_PAD, TT_ROW_TOP + TT_ROW_H + 10,     labelW, 24, g_fonts.body },
+        { IDC_TT_L_GAP,   TT_PAD, TT_ROW_TOP + 2 * TT_ROW_H + 10, labelW, 24, g_fonts.body },
+        { IDC_TT_START, editX, TT_ROW_TOP + 8,                editW, 22, g_fonts.mono },
+        { IDC_TT_END,   editX, TT_ROW_TOP + TT_ROW_H + 8,     editW, 22, g_fonts.mono },
+        { IDC_TT_GAP,   editX, TT_ROW_TOP + 2 * TT_ROW_H + 8, editW, 22, g_fonts.mono },
+        { IDC_TT_HINT,   TT_PAD, TT_ROW_TOP + 3 * TT_ROW_H + 2,  textW, 22, g_fonts.small_ },
+        { IDC_TT_RESULT, TT_PAD, TT_ROW_TOP + 3 * TT_ROW_H + 30, textW, 24, g_fonts.body },
+        { IDC_TT_APPLY,  TT_W - TT_PAD - 230, TT_BTN_Y, 110, TT_BTN_H, nullptr },
+        { IDC_TT_CANCEL, TT_W - TT_PAD - 110, TT_BTN_Y, 110, TT_BTN_H, nullptr },
+    };
+    PlaceControls(hDlg, places, sizeof(places) / sizeof(places[0]));
+}
+
+// The span and pause limit the three fields ask for. An empty start or pause
+// field reads as 0, an empty end as the whole recording. The end keeps every
+// event within the millisecond it names.
+static TrimTiming ReadTrimFields(HWND hDlg) {
+    TrimTiming trim;
+    BOOL ok = FALSE;
+    UINT v = GetDlgItemInt(hDlg, IDC_TT_START, &ok, FALSE);
+    if (ok) trim.startUs = (ULONGLONG)v * 1000;
+    v = GetDlgItemInt(hDlg, IDC_TT_END, &ok, FALSE);
+    if (ok) trim.endUs = (ULONGLONG)v * 1000 + 999;
+    v = GetDlgItemInt(hDlg, IDC_TT_GAP, &ok, FALSE);
+    if (ok) trim.maxGapUs = (ULONGLONG)v * 1000;
+    return trim;
+}
+
+// Work out the result of the fields as they stand and say what it would be.
+static void UpdateTrimPreview(HWND hDlg) {
+    s_trimResult = TrimAndRetime(s_trimSource, ReadTrimFields(hDlg));
+    wchar_t text[128];
+    if (s_trimResult.empty()) {
+        wcscpy(text, L"Nothing to keep in that span.");
+    } else {
+        swprintf(text, 128, L"Keeps %u of %u events, %.1f s long.",
+                 (unsigned)s_trimResult.size(), (unsigned)s_trimSource.size(),
+                 s_trimResult.back().timestampUs / 1e6);
+    }
+    SetDlgItemTextW(hDlg, IDC_TT_RESULT, text);
+}
+
+LRESULT CALLBACK TrimDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (HandleDialogDpi(hDlg, msg, wParam, lParam, s_trimScale, TT_W, TT_H, LayoutTrimDialog))
+        return TRUE;
+    switch (msg) {
+        case WM_CTLCOLORDLG: {
+            // A dialog paints its background with the brush returned here, not the class brush.
+            static HBRUSH dlgB = CreateSolidBrush(BG_PRIMARY);
+            return (INT_PTR)dlgB;
+        }
+        case WM_CTLCOLORSTATIC: {
+            static HBRUSH bgB = CreateSolidBrush(BG_PRIMARY);
+            int id = GetDlgCtrlID((HWND)lParam);
+            HDC dc = (HDC)wParam;
+            bool muted = (id == IDC_TT_SUB || id == IDC_TT_HINT);
+            SetTextColor(dc, muted ? TEXT_SECONDARY : TEXT_PRIMARY);
+            SetBkColor(dc, BG_PRIMARY);
+            return (INT_PTR)bgB;
+        }
+        case WM_CTLCOLOREDIT: {
+            static HBRUSH trackB = CreateSolidBrush(TRACK_BG);
+            HDC dc = (HDC)wParam;
+            SetTextColor(dc, TEXT_PRIMARY);
+            SetBkColor(dc, TRACK_BG);
+            return (INT_PTR)trackB;
+        }
+        case WM_PAINT: {
+            // The pills behind the three numbers, with an accent ring on the
+            // one being typed in. The dialog clips its children, so this
+            // paints only around the fields.
+            ScaleScope scope(s_trimScale);
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hDlg, &ps);
+            {
+                Gdiplus::Graphics g(hdc);
+                g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                const int ids[] = { IDC_TT_START, IDC_TT_END, IDC_TT_GAP };
+                HWND focus = GetFocus();
+                for (int i = 0; i < 3; ++i) {
+                    bool foc = focus && focus == GetDlgItem(hDlg, ids[i]);
+                    float x = (float)Sc(TT_PILL_X), y = (float)Sc(TT_ROW_TOP + i * TT_ROW_H);
+                    float w = (float)Sc(TT_PILL_W), h = (float)Sc(TT_PILL_H);
+                    FillRound(g, x, y, w, h, Scf(8.0f), GP(TRACK_BG));
+                    StrokeRound(g, x, y, w, h, Scf(8.0f), GP(foc ? ACCENT_PRIMARY : BORDER_DEFAULT),
+                                foc ? Scf(1.6f) : Scf(1.0f));
+                }
+            }
+            EndPaint(hDlg, &ps);
+            return TRUE;
+        }
+        case WM_DRAWITEM: {
+            ScaleScope scope(s_trimScale);   // paint at the dialog's own DPI
+            DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
+            if (dis->CtlID == IDC_TT_APPLY)  { DrawDlgButton(dis, L"Apply", true);   return TRUE; }
+            if (dis->CtlID == IDC_TT_CANCEL) { DrawDlgButton(dis, L"Cancel", false); return TRUE; }
+            break;
+        }
+        case WM_COMMAND: {
+            const int id = LOWORD(wParam), code = HIWORD(wParam);
+            if (id == IDC_TT_START || id == IDC_TT_END || id == IDC_TT_GAP) {
+                if (code == EN_CHANGE) UpdateTrimPreview(hDlg);
+                else if (code == EN_SETFOCUS || code == EN_KILLFOCUS) InvalidateRect(hDlg, NULL, TRUE);
+                break;
+            }
+            switch (id) {
+                case IDOK:
+                case IDC_TT_APPLY:
+                    if (s_trimResult.empty()) {
+                        MessageBeep(MB_ICONWARNING);
+                        break;
+                    }
+                    // A hotkey can start a recording or playback while this is open.
+                    if (!g_app.engine->ReplaceEvents(s_trimResult)) {
+                        MessageBoxW(hDlg, L"Stop recording and playback first, then apply.",
+                                    L"Trim & Timing", MB_OK | MB_ICONWARNING);
+                        break;
+                    }
+                    s_trimApplied = true;
+                    DestroyWindow(hDlg);
+                    break;
+                case IDCANCEL:
+                case IDC_TT_CANCEL:
+                    DestroyWindow(hDlg);
+                    break;
+            }
+            break;
+        }
+        case WM_CLOSE:
+            DestroyWindow(hDlg);
+            break;
+        case WM_DESTROY:
+            RestoreDialogClassBrush(hDlg);
+            break;
+    }
+    return 0;
+}
+
+bool ShowTrimTimingDialog(HWND hwnd) {
+    s_trimSource = g_app.engine->GetEvents();
+    s_trimApplied = false;
+    if (s_trimSource.empty()) return false;
+
+    struct {
+        DLGTEMPLATE dlg; WORD menu; WORD windowClass; WCHAR title[16];
+        WORD fontSize; WCHAR fontName[16];
+    } td;
+    memset(&td, 0, sizeof(td));
+    td.dlg.style = WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN | DS_MODALFRAME
+                 | DS_SETFONT | DS_CENTER;
+    td.dlg.cx = 260; td.dlg.cy = 170;
+    wcscpy(td.title, L"Trim & Timing");
+    td.fontSize = 9; wcscpy(td.fontName, L"Segoe UI");
+
+    HWND hDlg = CreateDialogIndirectParamW(GetModuleHandle(NULL), &td.dlg, hwnd,
+        (DLGPROC)TrimDialogWndProc, 0);
+    if (!hDlg) return false;
+
+    HINSTANCE hi = GetModuleHandle(NULL);
+    PatchDialogClassBrush(hDlg);
+    DisableDialogAutoDpi(hDlg);
+
+    auto makeStatic = [&](int id, const wchar_t* text) {
+        CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX,
+            0, 0, 0, 0, hDlg, (HMENU)(LONG_PTR)id, hi, NULL);
+    };
+    auto makeNumber = [&](int id, ULONGLONG value) {
+        wchar_t text[24];
+        swprintf(text, 24, L"%lu", (unsigned long)(value > 999999999 ? 999999999 : value));
+        CreateWindowExW(0, L"EDIT", text,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | ES_RIGHT | ES_NUMBER,
+            0, 0, 0, 0, hDlg, (HMENU)(LONG_PTR)id, hi, NULL);
+        SendDlgItemMessageW(hDlg, id, EM_LIMITTEXT, 9, 0);   // under 2^32 ms, so GetDlgItemInt reads it
+    };
+
+    const ULONGLONG lengthMs = s_trimSource.back().timestampUs / 1000;
+    wchar_t sub[128];
+    swprintf(sub, 128, L"This recording has %u events over %.1f s.",
+             (unsigned)s_trimSource.size(), s_trimSource.back().timestampUs / 1e6);
+
+    makeStatic(IDC_TT_TITLE, L"Trim & Timing");
+    makeStatic(IDC_TT_SUB, sub);
+    makeStatic(IDC_TT_L_START, L"Start at (ms)");
+    makeNumber(IDC_TT_START, 0);
+    makeStatic(IDC_TT_L_END, L"End at (ms)");
+    makeNumber(IDC_TT_END, lengthMs);
+    makeStatic(IDC_TT_L_GAP, L"Shorten pauses over (ms)");
+    makeNumber(IDC_TT_GAP, 0);
+    makeStatic(IDC_TT_HINT, L"0 keeps every pause. The file changes only when you save.");
+    makeStatic(IDC_TT_RESULT, L"");
+
+    CreateWindowExW(0, L"BUTTON", L"",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW | BS_DEFPUSHBUTTON,
+        0, 0, 0, 0, hDlg, (HMENU)IDC_TT_APPLY, hi, NULL);
+    CreateWindowExW(0, L"BUTTON", L"",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+        0, 0, 0, 0, hDlg, (HMENU)IDC_TT_CANCEL, hi, NULL);
+
+    UpdateTrimPreview(hDlg);
+
+    // Centre on the parent, laid out for the monitor the dialog lands on.
+    UINT dpi = 96;
+    RECT at = PlanDialog(hDlg, hwnd, TT_W, TT_H, dpi);
+    ScaleDialog(hDlg, s_trimScale, dpi, LayoutTrimDialog);
+    SetWindowPos(hDlg, HWND_TOP, at.left, at.top, at.right - at.left, at.bottom - at.top, 0);
+
+    ShowWindow(hDlg, SW_SHOW);
+    HWND start = GetDlgItem(hDlg, IDC_TT_START);
+    SetFocus(start);
+    SendMessageW(start, EM_SETSEL, 0, -1);
+
+    EnableWindow(hwnd, FALSE);
+    MSG msg;
+    while (IsWindow(hDlg) && GetMessage(&msg, NULL, 0, 0)) {
+        if (!IsDialogMessage(hDlg, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+    EnableWindow(hwnd, TRUE);
+    SetFocus(hwnd);
+    DeleteUiFonts(s_trimScale.fonts);   // the dialog and its controls are gone
+    s_trimSource.clear();
+    s_trimSource.shrink_to_fit();
+    s_trimResult.clear();
+    s_trimResult.shrink_to_fit();
+    return s_trimApplied;
 }
 
 }  // namespace flow::ui
