@@ -115,6 +115,34 @@ constexpr size_t MACRO_EVENT_SIZE_V2 = 36;
 /** @brief What follows "FLOW" in a versioned file, before the version */
 constexpr uint64_t MACRO_VERSION_MARKER = 0xFFFFFFFFFFFFFFFFULL;
 
+// ---- trim and timing ----
+
+/**
+ * @struct TrimTiming
+ * @brief Which part of a recording to keep, and how long its pauses may be
+ */
+struct TrimTiming {
+    ULONGLONG startUs = 0;              ///< Keep events at or after this time
+    ULONGLONG endUs = ~0ULL;            ///< Keep events at or before this time
+    ULONGLONG maxGapUs = 0;             ///< Shorten longer pauses to this; 0 keeps them
+};
+
+/**
+ * @brief A recording cut to a span of time, with its long pauses shortened
+ * @param events Recorded events in time order
+ * @param trim The span to keep and the longest pause
+ * @return The kept events, timed from the start of the span: the time from
+ *         the span's start to the first event, and every gap after it, is at
+ *         most `trim.maxGapUs` when that is set. Empty when the span is empty
+ *         or holds no events.
+ * @note The result plays the same as that part of the original:
+ *       - A cut start adds a move to where the cursor last was, at time 0.
+ *       - A release whose press was cut off is dropped.
+ *       - A press whose release was cut off is released at the end.
+ */
+std::vector<InputEvent> TrimAndRetime(const std::vector<InputEvent>& events,
+                                      const TrimTiming& trim);
+
 // ---- HighResTimer ----
 
 /**
@@ -573,6 +601,13 @@ public:
      * @return Every event in recording order
      */
     std::vector<InputEvent> GetEvents();
+
+    /**
+     * @brief Replace the recording with other events, such as a trimmed copy
+     * @param events The new events in time order
+     * @return false, changing nothing, while recording or playing back
+     */
+    bool ReplaceEvents(std::vector<InputEvent> events);
 
     /**
      * @brief Get the duration of the recorded macro in milliseconds
