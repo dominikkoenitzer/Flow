@@ -93,6 +93,8 @@ $CompileArgs = @(
     "-lcomctl32",
     "-lgdiplus",
     "-lshell32",
+    "-lole32",      # the shell link object behind Create Play Shortcut
+    "-luuid",
     # -static bundles libwinpthread/libstdc++/libgcc INTO the exe so it runs on
     # machines without MinGW. Only system DLLs (user32, gdi32, ...) stay external.
     "-static",

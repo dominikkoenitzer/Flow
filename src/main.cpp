@@ -11,6 +11,8 @@
 #include "AppState.h"
 #include "Settings.h"
 #include "Hotkeys.h"
+#include "LaunchArgs.h"
+#include "Shortcut.h"
 #include "ui/Buttons.h"
 #include "ui/Dialogs.h"
 #include "ui/Dpi.h"
@@ -21,7 +23,7 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <shellscalingapi.h>
-#include <shellapi.h>   // drag-and-drop (DragAcceptFiles / DragQueryFile)
+#include <shellapi.h>   // drag-and-drop, and CommandLineToArgvW
 #include <gdiplus.h>
 #include <string>
 #include <sstream>
@@ -35,6 +37,26 @@
 
 using namespace flow;
 using namespace flow::ui;
+
+// ---- play from the command line ----
+
+// `FLOW.exe --play x.rec` while FLOW is open hands the file to the open window
+// in a WM_COPYDATA tagged with this, so the run gets that window's hotkeys. A
+// second FLOW could not register them and could not be stopped from the
+// keyboard. Windows delivers it only from a process at least as elevated as
+// FLOW, which needs Administrator, so nothing less can start a run this way.
+static const ULONG_PTR COPY_PLAY = 0x504C4159;   // "PLAY"
+
+// What the open window answers.
+enum PlayReply : LRESULT {
+    PLAY_NOT_TAKEN = 0,   // not FLOW, an older FLOW, or no answer
+    PLAY_STARTED = 1,
+    PLAY_BUSY = 2,        // recording, playing, or a dialog is open
+    PLAY_BAD_FILE = 3,
+};
+
+// Set when this FLOW was started by --play: it closes once the run ends.
+static bool g_closeAfterPlay = false;
 
 // ---- status display ----
 
@@ -68,6 +90,10 @@ void ShowSettingsMenu(HWND hwnd) {
     AppendMenuW(hMenu, MF_STRING | (idle && hasEvents ? 0 : MF_GRAYED),
                 MENU_TRIM_TIMING, L"Trim && Timing…");
     AppendMenuW(hMenu, MF_STRING, MENU_CLEAR_RECORDING, L"Clear Recording");
+    const bool hasFile = !g_app.lastMacroPath.empty()
+        && GetFileAttributesW(g_app.lastMacroPath.c_str()) != INVALID_FILE_ATTRIBUTES;
+    AppendMenuW(hMenu, MF_STRING | (hasFile ? 0 : MF_GRAYED),
+                MENU_CREATE_SHORTCUT, L"Create Play Shortcut…");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(hMenu, MF_STRING, MENU_ABOUT, L"About FLOW");
 
@@ -718,6 +744,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (g_app.engine) g_app.engine->ClearRecording();
                     UpdateStatusDisplay();
                     break;
+                case MENU_CREATE_SHORTCUT:
+                    CreatePlayShortcut(hwnd, g_app.lastMacroPath);
+                    break;
                 case MENU_ABOUT:
                     ShowAboutDialog(hwnd);
                     break;
@@ -759,6 +788,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (!g_app.isRecording) SetWindowTextA(hwnd, "FLOW");
                     UpdateStatusDisplay();
                 }
+                // A FLOW started by --play closes when its run ends, however
+                // it ended.
+                if (g_closeAfterPlay && !g_app.isPlaying) {
+                    g_closeAfterPlay = false;
+                    PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                }
                 // The clicker stops by itself once it reaches its click limit.
                 if (g_app.isClicking && g_app.engine && !g_app.engine->IsClickerActive()) {
                     g_app.isClicking = false;
@@ -790,6 +825,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             DragFinish(drop);
             return 0;
+        }
+
+        case WM_COPYDATA: {
+            // FLOW.exe --play, started while this window is open (see COPY_PLAY).
+            const COPYDATASTRUCT* cds = (const COPYDATASTRUCT*)lParam;
+            if (!cds || cds->dwData != COPY_PLAY || !cds->lpData || cds->cbData == 0
+                || cds->cbData % sizeof(wchar_t) != 0 || cds->cbData > 32768 * sizeof(wchar_t))
+                return PLAY_NOT_TAKEN;
+            std::wstring path((const wchar_t*)cds->lpData, cds->cbData / sizeof(wchar_t));
+            path.resize(wcsnlen(path.c_str(), path.size()));
+            // A dialog may hold a copy of the recording to write back later.
+            if (g_app.isRecording || g_app.isPlaying || g_app.engine->IsPlaybackActive()
+                || !IsWindowEnabled(hwnd))
+                return PLAY_BUSY;
+            if (!g_app.engine->LoadMacro(path)) return PLAY_BAD_FILE;
+            g_app.lastMacroPath = path;
+            SaveSettings();
+            TogglePlayback(hwnd);
+            return PLAY_STARTED;
         }
 
         case WM_CLOSE:
@@ -930,7 +984,63 @@ void CreateControls(HWND hwnd) {
 
 // ---- entry point ----
 
+// The command line, split the way Windows splits it.
+static LaunchArgs ReadLaunchArgs() {
+    LaunchArgs args;
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv) {
+        args = ParseLaunchArgs(argc, argv);
+        LocalFree(argv);
+    }
+    return args;
+}
+
+// Give `macro` to the FLOW window already open, if there is one. Returns
+// true when there was one, having told the user if it did not start the run.
+static bool HandPlayToOpenWindow(const std::wstring& macro) {
+    HWND open = FindWindowW(L"FLOW_Modern", NULL);
+    if (!open) return false;
+    COPYDATASTRUCT cds = {};
+    cds.dwData = COPY_PLAY;
+    cds.cbData = (DWORD)((macro.size() + 1) * sizeof(wchar_t));
+    cds.lpData = (void*)macro.c_str();
+    DWORD_PTR result = 0;
+    const LRESULT reply = SendMessageTimeoutW(open, WM_COPYDATA, 0, (LPARAM)&cds,
+                                              SMTO_ABORTIFHUNG, 5000, &result)
+        ? (LRESULT)result : PLAY_NOT_TAKEN;
+    if (reply == PLAY_BUSY) {
+        MessageBoxW(NULL, L"FLOW is recording, playing or has a dialog open. "
+                    L"Finish that, then start the shortcut again.",
+                    L"FLOW", MB_OK | MB_ICONWARNING);
+    } else if (reply == PLAY_BAD_FILE) {
+        MessageBoxW(NULL, (L"That file isn't a valid FLOW macro (.rec):\n" + macro).c_str(),
+                    L"FLOW", MB_OK | MB_ICONWARNING);
+    } else if (reply != PLAY_STARTED) {
+        MessageBoxW(NULL, L"FLOW is open but did not take the macro. "
+                    L"Close FLOW and start the shortcut again.",
+                    L"FLOW", MB_OK | MB_ICONWARNING);
+    }
+    return true;
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
+    // FLOW.exe --play "x.rec": play it in the open FLOW, or in this one, which
+    // then stays minimised and closes when the run ends.
+    const LaunchArgs launch = ReadLaunchArgs();
+    if (launch.invalid) {
+        MessageBoxW(NULL, L"Usage: FLOW.exe --play \"macro.rec\"", L"FLOW", MB_OK | MB_ICONINFORMATION);
+        return 1;
+    }
+    std::wstring playMacro;
+    if (launch.play) {
+        // The open FLOW may run in another folder, so it gets the full path.
+        wchar_t full[32768];
+        const DWORD n = GetFullPathNameW(launch.macro.c_str(), 32768, full, NULL);
+        playMacro = (n > 0 && n < 32768) ? std::wstring(full) : launch.macro;
+        if (HandPlayToOpenWindow(playMacro)) return 0;
+    }
+
     // High-DPI awareness for crisp rendering
     typedef BOOL(WINAPI* SetProcessDpiAwarenessContextFunc)(DPI_AWARENESS_CONTEXT);
     HMODULE user32 = LoadLibraryA("user32.dll");
@@ -1070,8 +1180,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_app.engine->EnableHumanization(g_app.humanizationEnabled);
     g_app.engine->ConfigureHumanization(0.0, g_app.humanizationStdDev);
 
-    // Optionally reopen the last macro so playback is ready immediately on launch.
-    if (g_app.reopenLastMacro && !g_app.lastMacroPath.empty()) {
+    if (launch.play) {
+        // A run from a shortcut leaves the last macro setting as it was.
+        if (!g_app.engine->LoadMacro(playMacro)) {
+            MessageBoxW(NULL, (L"That file isn't a valid FLOW macro (.rec):\n" + playMacro).c_str(),
+                        L"FLOW", MB_OK | MB_ICONWARNING);
+            delete g_app.engine;
+            return 1;
+        }
+    } else if (g_app.reopenLastMacro && !g_app.lastMacroPath.empty()) {
+        // Optionally reopen the last macro so playback is ready immediately on launch.
         g_app.engine->LoadMacro(g_app.lastMacroPath);  // silently ignored if missing
     }
 
@@ -1092,8 +1210,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     UpdateWindowState();
 
     SetTimer(g_app.hwnd, TIMER_STATUS_CHECK, 100, NULL);
-    ShowWindow(g_app.hwnd, nCmdShow);
+    // Minimised and without focus for a --play run, so the window covers
+    // nothing the macro clicks on and the keys it types go where they did.
+    ShowWindow(g_app.hwnd, launch.play ? SW_SHOWMINNOACTIVE : nCmdShow);
     UpdateWindow(g_app.hwnd);
+    if (launch.play) {
+        g_closeAfterPlay = true;
+        TogglePlayback(g_app.hwnd);
+    }
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {

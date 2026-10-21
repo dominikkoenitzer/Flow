@@ -50,7 +50,7 @@ jobs:
           g++ -std=c++17 -O3 -DNDEBUG -mwindows -I include \
             -o build/FLOW.exe \
             src/*.cpp src/ui/*.cpp build/resource.o \
-            -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 \
+            -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -lole32 -luuid \
             -static -static-libgcc -static-libstdc++
 
       - name: Verify the binary is self-contained
