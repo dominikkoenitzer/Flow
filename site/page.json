@@ -1,7 +1,7 @@
 {
   "slug": "flow",
   "name": "Flow",
-  "url": "https://get-flow-app.vercel.app/",
+  "url": "https://flow.punds.ch/",
   "description": "Record a task once with your mouse and keyboard, and Flow repeats it for you. A macro recorder and auto-clicker for Windows.",
   "colours": {
     "light": {
