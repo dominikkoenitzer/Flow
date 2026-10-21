@@ -196,7 +196,7 @@ TEST_CASE("Events that run backwards play at once instead of wrapping") {
     const std::vector<InputEvent> events = {
         at(500, Type::KEY_DOWN, 'A'),
         at(400, Type::KEY_UP, 'A'),
-        at(600, Type::KEY_DOWN, 'B'),
+        at(600, Type::MOUSE_WHEEL),
     };
     const auto out = TrimAndRetime(events, TrimTiming{});
     CHECK(timesMs(out) == std::vector<ULONGLONG>{ 500, 500, 600 });
