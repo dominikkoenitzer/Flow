@@ -718,9 +718,16 @@ LRESULT CALLBACK TrimDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lP
                         break;
                     }
                     // A hotkey can start a recording or playback while this is open.
-                    if (!g_app.engine->ReplaceEvents(s_trimResult)) {
+                    if (g_app.engine->IsRecordingActive() || g_app.engine->IsPlaybackActive()) {
                         MessageBoxW(hDlg, L"Stop recording and playback first, then apply.",
                                     L"Trim & Timing", MB_OK | MB_ICONWARNING);
+                        break;
+                    }
+                    // A recording made since this opened is kept; the trim was of the one before.
+                    if (!g_app.engine->ReplaceEvents(s_trimSource, s_trimResult)) {
+                        MessageBoxW(hDlg, L"The recording changed while this was open, so nothing was applied.",
+                                    L"Trim & Timing", MB_OK | MB_ICONWARNING);
+                        DestroyWindow(hDlg);
                         break;
                     }
                     s_trimApplied = true;

@@ -604,11 +604,13 @@ public:
     std::vector<InputEvent> GetEvents();
 
     /**
-     * @brief Replace the recording with other events, such as a trimmed copy
+     * @brief Replace the recording with an edited copy of it, such as a trimmed one
+     * @param from The recording the copy was made from, as GetEvents returned it
      * @param events The new events in time order
-     * @return false, changing nothing, while recording or playing back
+     * @return false, changing nothing, while recording or playing back, or once
+     *         the recording is no longer `from`
      */
-    bool ReplaceEvents(std::vector<InputEvent> events);
+    bool ReplaceEvents(const std::vector<InputEvent>& from, std::vector<InputEvent> events);
 
     /**
      * @brief Get the duration of the recorded macro in milliseconds
