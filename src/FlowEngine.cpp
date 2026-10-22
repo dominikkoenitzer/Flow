@@ -506,12 +506,16 @@ std::vector<InputEvent> TrimAndRetime(const std::vector<InputEvent>& events,
         if (event.timestampUs > trim.endUs) continue;
         const bool inSpan = event.timestampUs >= trim.startUs;
         if (inSpan && kept.empty() && trim.startUs > 0) {
-            // Put the cursor and anything held back as they were at the cut.
+            // Put the cursor and anything held back as they were at the cut,
+            // the presses in their recorded order so a modifier stays first.
             if (lastMove) add(*lastMove, 0);
-            for (int b = 0; b < 5; ++b)
-                if (buttonPress[b]) add(*buttonPress[b], 0);
-            for (int vk = 0; vk < 256; ++vk)
-                if (keyPress[vk]) add(*keyPress[vk], 0);
+            std::vector<const InputEvent*> held;
+            for (const InputEvent* press : buttonPress)
+                if (press) held.push_back(press);
+            for (const InputEvent* press : keyPress)
+                if (press) held.push_back(press);
+            std::sort(held.begin(), held.end());   // all point into `events`
+            for (const InputEvent* press : held) add(*press, 0);
         }
 
         // Whether this press is now held, or this release lets one go.
