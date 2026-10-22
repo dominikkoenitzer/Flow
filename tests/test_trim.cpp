@@ -229,10 +229,26 @@ TEST_CASE("Events that run backwards play at once instead of wrapping") {
 TEST_CASE("ReplaceEvents swaps the recording when idle") {
     FlowEngine engine;
     CHECK(engine.GetEventCount() == 0);
-    CHECK(engine.ReplaceEvents({ at(0, Type::KEY_DOWN, 'A'), at(250, Type::KEY_UP, 'A') }));
+    CHECK(engine.ReplaceEvents({}, { at(0, Type::KEY_DOWN, 'A'), at(250, Type::KEY_UP, 'A') }));
     CHECK(engine.GetEventCount() == 2);
     CHECK(engine.GetDurationMs() == 250);
 
-    CHECK(engine.ReplaceEvents({}));
+    CHECK(engine.ReplaceEvents(engine.GetEvents(), {}));
     CHECK(engine.GetEventCount() == 0);
+}
+
+TEST_CASE("ReplaceEvents keeps a recording made after the copy was taken") {
+    FlowEngine engine;
+    REQUIRE(engine.ReplaceEvents({}, { at(0, Type::KEY_DOWN, 'A'), at(250, Type::KEY_UP, 'A') }));
+    const std::vector<InputEvent> opened = engine.GetEvents();
+    const auto trimmed = TrimAndRetime(opened, span(0, 100));
+
+    // Recorded with the hotkey while Trim & Timing still held `opened`.
+    REQUIRE(engine.ReplaceEvents(opened, { at(0, Type::KEY_DOWN, 'B'), at(90, Type::KEY_UP, 'B') }));
+
+    CHECK_FALSE(engine.ReplaceEvents(opened, trimmed));
+    const auto now = engine.GetEvents();
+    REQUIRE(now.size() == 2);
+    CHECK(now[0].virtualKeyCode == 'B');
+    CHECK(now[1].timestampUs == 90000);
 }

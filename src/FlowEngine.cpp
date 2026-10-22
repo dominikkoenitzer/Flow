@@ -447,9 +447,19 @@ std::vector<InputEvent> FlowEngine::GetEvents() {
     return recordedEvents;
 }
 
-bool FlowEngine::ReplaceEvents(std::vector<InputEvent> events) {
+static bool SameEvent(const InputEvent& a, const InputEvent& b) {
+    return a.type == b.type && a.screenCoords.x == b.screenCoords.x
+        && a.screenCoords.y == b.screenCoords.y && a.virtualKeyCode == b.virtualKeyCode
+        && a.timestampUs == b.timestampUs && a.scanCode == b.scanCode
+        && a.flags == b.flags && a.mouseData == b.mouseData;
+}
+
+bool FlowEngine::ReplaceEvents(const std::vector<InputEvent>& from, std::vector<InputEvent> events) {
     if (isRecording.load() || isPlaying.load()) return false;
     std::lock_guard<std::mutex> lock(recordMutex);
+    // The record hotkey can replace the recording while an edit of it is open.
+    if (!std::equal(recordedEvents.begin(), recordedEvents.end(), from.begin(), from.end(), SameEvent))
+        return false;
     recordedEvents = std::move(events);
     return true;
 }
