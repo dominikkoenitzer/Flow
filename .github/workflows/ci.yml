@@ -14,16 +14,9 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/PULL_REQUEST_TEMPLATE.md'
       - '.github/dependabot.yml'
+  # Every PR starts a run so the required check always reports; the changes job skips the build for docs-only PRs.
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - '.editorconfig'
-      - '.gitattributes'
-      - '.gitignore'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/PULL_REQUEST_TEMPLATE.md'
-      - '.github/dependabot.yml'
   workflow_dispatch:
 
   # On a timer as well as on every push. Nothing here changes between those
@@ -47,8 +40,40 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # Same list as the push trigger's paths-ignore; keep the two in sync.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Checkout
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Look for changes outside the docs
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          files=$(git diff --no-renames --name-only HEAD^1 HEAD)
+          code=false
+          while IFS= read -r f; do
+            case "$f" in
+              ''|*.md|.editorconfig|.gitattributes|.gitignore|.github/ISSUE_TEMPLATE/*|.github/dependabot.yml) ;;
+              *) code=true ;;
+            esac
+          done <<< "$files"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build (Windows, MinGW)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     defaults:
       run:
@@ -114,3 +139,19 @@ jobs:
           path: build/FLOW.exe
           if-no-files-found: error
           retention-days: 7
+
+  # The check to require on main: it reports on every PR, and a skipped build counts as passed.
+  result:
+    name: CI result
+    needs: [changes, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the jobs
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          BUILD: ${{ needs.build.result }}
+        run: |
+          echo "changes: $CHANGES, build: $BUILD"
+          if [ "$CHANGES" != success ]; then exit 1; fi
+          if [ "$BUILD" != success ] && [ "$BUILD" != skipped ]; then exit 1; fi
