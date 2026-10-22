@@ -137,7 +137,8 @@ struct TrimTiming {
  *         or holds no events.
  * @note The result plays the same as that part of the original:
  *       - A cut start adds a move to where the cursor last was, at time 0.
- *       - A release whose press was cut off is dropped.
+ *       - A key or button held at a cut start is pressed again there, the
+ *         presses in the order they were made.
  *       - A press whose release was cut off is released at the end.
  */
 std::vector<InputEvent> TrimAndRetime(const std::vector<InputEvent>& events,

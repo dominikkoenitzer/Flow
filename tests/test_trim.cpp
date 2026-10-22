@@ -129,11 +129,35 @@ TEST_CASE("A key or button held across the cut start is pressed again at the sta
         at(320, Type::MOUSE_RIGHT_UP),
     };
     const auto out = TrimAndRetime(events, span(100, 1000));
-    CHECK(types(out) == std::vector<Type>{ Type::MOUSE_RIGHT_DOWN, Type::KEY_DOWN,
+    CHECK(types(out) == std::vector<Type>{ Type::KEY_DOWN, Type::MOUSE_RIGHT_DOWN,
                                            Type::KEY_DOWN, Type::KEY_UP, Type::KEY_UP,
                                            Type::MOUSE_RIGHT_UP });
     CHECK(timesMs(out) == std::vector<ULONGLONG>{ 0, 0, 100, 140, 200, 220 });
-    CHECK(out[1].virtualKeyCode == VK_SHIFT);
+    CHECK(out[0].virtualKeyCode == VK_SHIFT);
+}
+
+TEST_CASE("Presses held at the cut start are made again in their recorded order") {
+    // Shift, then the button: a shift-drag must start with Shift already down.
+    const std::vector<InputEvent> shiftDrag = {
+        at(0, Type::KEY_DOWN, VK_SHIFT),
+        at(10, Type::MOUSE_LEFT_DOWN),
+        at(500, Type::MOUSE_LEFT_UP),
+        at(510, Type::KEY_UP, VK_SHIFT),
+    };
+    const auto out = TrimAndRetime(shiftDrag, span(100, 1000));
+    CHECK(types(out) == std::vector<Type>{ Type::KEY_DOWN, Type::MOUSE_LEFT_DOWN,
+                                           Type::MOUSE_LEFT_UP, Type::KEY_UP });
+
+    // The button, then the key: a key pressed during a drag stays after it.
+    const std::vector<InputEvent> dragThenKey = {
+        at(0, Type::MOUSE_LEFT_DOWN),
+        at(10, Type::KEY_DOWN, VK_CONTROL),
+        at(500, Type::KEY_UP, VK_CONTROL),
+        at(510, Type::MOUSE_LEFT_UP),
+    };
+    const auto out2 = TrimAndRetime(dragThenKey, span(100, 1000));
+    CHECK(types(out2) == std::vector<Type>{ Type::MOUSE_LEFT_DOWN, Type::KEY_DOWN,
+                                            Type::KEY_UP, Type::MOUSE_LEFT_UP });
 }
 
 TEST_CASE("A key released before the cut start is not pressed again") {
