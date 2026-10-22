@@ -535,7 +535,10 @@ std::vector<InputEvent> TrimAndRetime(const std::vector<InputEvent>& events,
             buttonPress[button] = down ? &event : nullptr;
         } else if (event.virtualKeyCode < 256 && (event.type == EventType::KEY_DOWN
                                                   || event.type == EventType::KEY_UP)) {
-            keyPress[event.virtualKeyCode] = event.type == EventType::KEY_DOWN ? &event : nullptr;
+            // An auto-repeat is another KEY_DOWN; the key stays held from its first press.
+            const InputEvent*& press = keyPress[event.virtualKeyCode];
+            if (event.type == EventType::KEY_UP) press = nullptr;
+            else if (!press) press = &event;
         } else if (event.type == EventType::MOUSE_MOVE) {
             lastMove = &event;
         }
