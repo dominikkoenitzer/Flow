@@ -160,6 +160,35 @@ TEST_CASE("Presses held at the cut start are made again in their recorded order"
                                             Type::KEY_UP, Type::MOUSE_LEFT_UP });
 }
 
+TEST_CASE("A held key counts from its first press, not its auto-repeats") {
+    // Shift keeps repeating after the button goes down; Shift must still come first.
+    const std::vector<InputEvent> repeating = {
+        at(0, Type::KEY_DOWN, VK_SHIFT),
+        at(30, Type::KEY_DOWN, VK_SHIFT),
+        at(40, Type::MOUSE_LEFT_DOWN),
+        at(60, Type::KEY_DOWN, VK_SHIFT),
+        at(90, Type::KEY_DOWN, VK_SHIFT),
+        at(500, Type::MOUSE_LEFT_UP),
+        at(510, Type::KEY_UP, VK_SHIFT),
+    };
+    const auto out = TrimAndRetime(repeating, span(100, 1000));
+    CHECK(types(out) == std::vector<Type>{ Type::KEY_DOWN, Type::MOUSE_LEFT_DOWN,
+                                           Type::MOUSE_LEFT_UP, Type::KEY_UP });
+
+    // A release ends the press, so a new press after it counts from there.
+    const std::vector<InputEvent> pressedAgain = {
+        at(0, Type::KEY_DOWN, VK_SHIFT),
+        at(20, Type::KEY_UP, VK_SHIFT),
+        at(30, Type::MOUSE_LEFT_DOWN),
+        at(40, Type::KEY_DOWN, VK_SHIFT),
+        at(500, Type::KEY_UP, VK_SHIFT),
+        at(510, Type::MOUSE_LEFT_UP),
+    };
+    const auto out2 = TrimAndRetime(pressedAgain, span(100, 1000));
+    CHECK(types(out2) == std::vector<Type>{ Type::MOUSE_LEFT_DOWN, Type::KEY_DOWN,
+                                            Type::KEY_UP, Type::MOUSE_LEFT_UP });
+}
+
 TEST_CASE("A key released before the cut start is not pressed again") {
     const std::vector<InputEvent> events = {
         at(0, Type::KEY_DOWN, 'A'),
