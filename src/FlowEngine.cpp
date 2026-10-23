@@ -447,6 +447,126 @@ std::vector<InputEvent> FlowEngine::GetEvents() {
     return recordedEvents;
 }
 
+static bool SameEvent(const InputEvent& a, const InputEvent& b) {
+    return a.type == b.type && a.screenCoords.x == b.screenCoords.x
+        && a.screenCoords.y == b.screenCoords.y && a.virtualKeyCode == b.virtualKeyCode
+        && a.timestampUs == b.timestampUs && a.scanCode == b.scanCode
+        && a.flags == b.flags && a.mouseData == b.mouseData;
+}
+
+bool FlowEngine::ReplaceEvents(const std::vector<InputEvent>& from, std::vector<InputEvent> events) {
+    if (isRecording.load() || isPlaying.load()) return false;
+    std::lock_guard<std::mutex> lock(recordMutex);
+    // The record hotkey can replace the recording while an edit of it is open.
+    if (!std::equal(recordedEvents.begin(), recordedEvents.end(), from.begin(), from.end(), SameEvent))
+        return false;
+    recordedEvents = std::move(events);
+    return true;
+}
+
+// ---- trim and timing ----
+
+namespace {
+
+using EventType = InputEvent::Type;
+
+// The button a press or release is for (left, right, middle, X1, X2), or -1.
+int ButtonOf(EventType type, bool& down) {
+    switch (type) {
+        case EventType::MOUSE_LEFT_DOWN:   down = true;  return 0;
+        case EventType::MOUSE_LEFT_UP:     down = false; return 0;
+        case EventType::MOUSE_RIGHT_DOWN:  down = true;  return 1;
+        case EventType::MOUSE_RIGHT_UP:    down = false; return 1;
+        case EventType::MOUSE_MIDDLE_DOWN: down = true;  return 2;
+        case EventType::MOUSE_MIDDLE_UP:   down = false; return 2;
+        case EventType::MOUSE_X1_DOWN:     down = true;  return 3;
+        case EventType::MOUSE_X1_UP:       down = false; return 3;
+        case EventType::MOUSE_X2_DOWN:     down = true;  return 4;
+        case EventType::MOUSE_X2_UP:       down = false; return 4;
+        default: return -1;
+    }
+}
+
+const EventType BUTTON_UP[5] = { EventType::MOUSE_LEFT_UP, EventType::MOUSE_RIGHT_UP,
+                                 EventType::MOUSE_MIDDLE_UP, EventType::MOUSE_X1_UP,
+                                 EventType::MOUSE_X2_UP };
+
+}  // namespace
+
+std::vector<InputEvent> TrimAndRetime(const std::vector<InputEvent>& events,
+                                      const TrimTiming& trim) {
+    std::vector<InputEvent> kept;
+    if (trim.startUs > trim.endUs) return kept;
+
+    // What is held, and where the cursor is, as playback reaches each event.
+    const InputEvent* buttonPress[5] = {};
+    const InputEvent* keyPress[256] = {};
+    const InputEvent* lastMove = nullptr;
+
+    ULONGLONG lastUs = trim.startUs;   // original time of the event before
+    ULONGLONG atUs = 0;                // its time in the result
+    auto add = [&](InputEvent event, ULONGLONG gapUs) {
+        if (trim.maxGapUs != 0 && gapUs > trim.maxGapUs) gapUs = trim.maxGapUs;
+        atUs += gapUs;
+        event.timestampUs = atUs;
+        kept.push_back(event);
+    };
+
+    for (const InputEvent& event : events) {
+        if (event.timestampUs > trim.endUs) continue;
+        const bool inSpan = event.timestampUs >= trim.startUs;
+        if (inSpan && kept.empty() && trim.startUs > 0) {
+            // Put the cursor and anything held back as they were at the cut,
+            // the presses in their recorded order so a modifier stays first.
+            if (lastMove) add(*lastMove, 0);
+            std::vector<const InputEvent*> held;
+            for (const InputEvent* press : buttonPress)
+                if (press) held.push_back(press);
+            for (const InputEvent* press : keyPress)
+                if (press) held.push_back(press);
+            std::sort(held.begin(), held.end());   // all point into `events`
+            for (const InputEvent* press : held) add(*press, 0);
+        }
+
+        // Whether this press is now held, or this release lets one go.
+        bool down = false;
+        const int button = ButtonOf(event.type, down);
+        if (button >= 0) {
+            buttonPress[button] = down ? &event : nullptr;
+        } else if (event.virtualKeyCode < 256 && (event.type == EventType::KEY_DOWN
+                                                  || event.type == EventType::KEY_UP)) {
+            // An auto-repeat is another KEY_DOWN; the key stays held from its first press.
+            const InputEvent*& press = keyPress[event.virtualKeyCode];
+            if (event.type == EventType::KEY_UP) press = nullptr;
+            else if (!press) press = &event;
+        } else if (event.type == EventType::MOUSE_MOVE) {
+            lastMove = &event;
+        }
+
+        if (!inSpan) continue;
+        // A hand-edited file may run backwards; such an event plays at once.
+        add(event, event.timestampUs > lastUs ? event.timestampUs - lastUs : 0);
+        lastUs = std::max(lastUs, event.timestampUs);
+    }
+    if (kept.empty()) return kept;
+
+    // Let go of whatever the cut end leaves held, right after the last event.
+    for (int b = 0; b < 5; ++b) {
+        if (!buttonPress[b]) continue;
+        InputEvent up = *buttonPress[b];
+        up.type = BUTTON_UP[b];
+        add(up, 0);
+    }
+    for (int vk = 0; vk < 256; ++vk) {
+        if (!keyPress[vk]) continue;
+        InputEvent up = *keyPress[vk];
+        up.type = EventType::KEY_UP;
+        up.flags |= LLKHF_UP;
+        add(up, 0);
+    }
+    return kept;
+}
+
 void FlowEngine::SetControlKeys(DWORD record, DWORD playback, DWORD clicker, DWORD stop) {
     controlKeys[0].store(record);
     controlKeys[1].store(playback);

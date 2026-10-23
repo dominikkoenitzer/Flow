@@ -1,0 +1,283 @@
+/**
+ * @file test_trim.cpp
+ * @brief TrimAndRetime, behind the Trim & Timing dialog, and ReplaceEvents.
+ *
+ * Events are built by hand with the times they would have been recorded at,
+ * so each test states the recording it cuts and what the cut should play.
+ */
+#include "doctest.h"
+
+#include "FlowEngine.h"
+
+#include <vector>
+
+using flow::FlowEngine;
+using flow::InputEvent;
+using flow::TrimAndRetime;
+using flow::TrimTiming;
+using Type = flow::InputEvent::Type;
+
+namespace {
+
+/** One event of `type` recorded at `ms` milliseconds. */
+InputEvent at(ULONGLONG ms, Type type, DWORD vk = 0, LONG x = 0, LONG y = 0) {
+    InputEvent event;
+    event.type = type;
+    event.timestampUs = ms * 1000;
+    event.virtualKeyCode = vk;
+    event.screenCoords = { x, y };
+    return event;
+}
+
+/** A span from `startMs` to `endMs`, pauses capped at `maxGapMs` (0 keeps them). */
+TrimTiming span(ULONGLONG startMs, ULONGLONG endMs, ULONGLONG maxGapMs = 0) {
+    TrimTiming trim;
+    trim.startUs = startMs * 1000;
+    trim.endUs = endMs * 1000;
+    trim.maxGapUs = maxGapMs * 1000;
+    return trim;
+}
+
+/** The times of `events`, in milliseconds. */
+std::vector<ULONGLONG> timesMs(const std::vector<InputEvent>& events) {
+    std::vector<ULONGLONG> out;
+    for (const InputEvent& event : events) out.push_back(event.timestampUs / 1000);
+    return out;
+}
+
+/** The types of `events`. */
+std::vector<Type> types(const std::vector<InputEvent>& events) {
+    std::vector<Type> out;
+    for (const InputEvent& event : events) out.push_back(event.type);
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("The default span keeps a recording as it is") {
+    const std::vector<InputEvent> events = {
+        at(0, Type::MOUSE_MOVE, 0, 10, 20),
+        at(100, Type::KEY_DOWN, 'A'),
+        at(150, Type::KEY_UP, 'A'),
+        at(2000, Type::MOUSE_WHEEL),
+    };
+    const auto out = TrimAndRetime(events, TrimTiming{});
+    CHECK(timesMs(out) == std::vector<ULONGLONG>{ 0, 100, 150, 2000 });
+    CHECK(types(out) == types(events));
+    CHECK(out[0].screenCoords.x == 10);
+    CHECK(out[0].screenCoords.y == 20);
+}
+
+TEST_CASE("A cut start times the rest from the cut") {
+    const std::vector<InputEvent> events = {
+        at(100, Type::KEY_DOWN, 'A'),
+        at(150, Type::KEY_UP, 'A'),
+        at(1000, Type::KEY_DOWN, 'B'),
+        at(1080, Type::KEY_UP, 'B'),
+    };
+    const auto out = TrimAndRetime(events, span(900, 5000));
+    CHECK(timesMs(out) == std::vector<ULONGLONG>{ 100, 180 });
+    CHECK(out[0].virtualKeyCode == 'B');
+}
+
+TEST_CASE("A cut end drops everything after it, and the end is inclusive") {
+    const std::vector<InputEvent> events = {
+        at(0, Type::KEY_DOWN, 'A'),
+        at(50, Type::KEY_UP, 'A'),
+        at(500, Type::KEY_DOWN, 'B'),
+        at(550, Type::KEY_UP, 'B'),
+    };
+    const auto out = TrimAndRetime(events, span(0, 50));
+    CHECK(timesMs(out) == std::vector<ULONGLONG>{ 0, 50 });
+    CHECK(out.back().virtualKeyCode == 'A');
+}
+
+TEST_CASE("Long pauses are shortened, the lead-in too, and short ones kept") {
+    const std::vector<InputEvent> events = {
+        at(3000, Type::KEY_DOWN, 'A'),   // 3 s after the start
+        at(3040, Type::KEY_UP, 'A'),     // 40 ms
+        at(9040, Type::KEY_DOWN, 'B'),   // 6 s
+        at(9100, Type::KEY_UP, 'B'),     // 60 ms
+    };
+    const auto out = TrimAndRetime(events, span(0, 10000, 500));
+    CHECK(timesMs(out) == std::vector<ULONGLONG>{ 500, 540, 1040, 1100 });
+}
+
+TEST_CASE("A cut start puts the cursor back where it was") {
+    const std::vector<InputEvent> events = {
+        at(10, Type::MOUSE_MOVE, 0, 5, 5),
+        at(20, Type::MOUSE_MOVE, 0, 300, 400),
+        at(500, Type::MOUSE_LEFT_DOWN),
+        at(560, Type::MOUSE_LEFT_UP),
+    };
+    const auto out = TrimAndRetime(events, span(100, 1000));
+    REQUIRE(out.size() == 3);
+    CHECK(out[0].type == Type::MOUSE_MOVE);
+    CHECK(out[0].timestampUs == 0);
+    CHECK(out[0].screenCoords.x == 300);
+    CHECK(out[0].screenCoords.y == 400);
+    CHECK(timesMs(out) == std::vector<ULONGLONG>{ 0, 400, 460 });
+}
+
+TEST_CASE("A key or button held across the cut start is pressed again at the start") {
+    const std::vector<InputEvent> events = {
+        at(0, Type::KEY_DOWN, VK_SHIFT),
+        at(10, Type::MOUSE_RIGHT_DOWN),
+        at(200, Type::KEY_DOWN, 'A'),
+        at(240, Type::KEY_UP, 'A'),
+        at(300, Type::KEY_UP, VK_SHIFT),
+        at(320, Type::MOUSE_RIGHT_UP),
+    };
+    const auto out = TrimAndRetime(events, span(100, 1000));
+    CHECK(types(out) == std::vector<Type>{ Type::KEY_DOWN, Type::MOUSE_RIGHT_DOWN,
+                                           Type::KEY_DOWN, Type::KEY_UP, Type::KEY_UP,
+                                           Type::MOUSE_RIGHT_UP });
+    CHECK(timesMs(out) == std::vector<ULONGLONG>{ 0, 0, 100, 140, 200, 220 });
+    CHECK(out[0].virtualKeyCode == VK_SHIFT);
+}
+
+TEST_CASE("Presses held at the cut start are made again in their recorded order") {
+    // Shift, then the button: a shift-drag must start with Shift already down.
+    const std::vector<InputEvent> shiftDrag = {
+        at(0, Type::KEY_DOWN, VK_SHIFT),
+        at(10, Type::MOUSE_LEFT_DOWN),
+        at(500, Type::MOUSE_LEFT_UP),
+        at(510, Type::KEY_UP, VK_SHIFT),
+    };
+    const auto out = TrimAndRetime(shiftDrag, span(100, 1000));
+    CHECK(types(out) == std::vector<Type>{ Type::KEY_DOWN, Type::MOUSE_LEFT_DOWN,
+                                           Type::MOUSE_LEFT_UP, Type::KEY_UP });
+
+    // The button, then the key: a key pressed during a drag stays after it.
+    const std::vector<InputEvent> dragThenKey = {
+        at(0, Type::MOUSE_LEFT_DOWN),
+        at(10, Type::KEY_DOWN, VK_CONTROL),
+        at(500, Type::KEY_UP, VK_CONTROL),
+        at(510, Type::MOUSE_LEFT_UP),
+    };
+    const auto out2 = TrimAndRetime(dragThenKey, span(100, 1000));
+    CHECK(types(out2) == std::vector<Type>{ Type::MOUSE_LEFT_DOWN, Type::KEY_DOWN,
+                                            Type::KEY_UP, Type::MOUSE_LEFT_UP });
+}
+
+TEST_CASE("A held key counts from its first press, not its auto-repeats") {
+    // Shift keeps repeating after the button goes down; Shift must still come first.
+    const std::vector<InputEvent> repeating = {
+        at(0, Type::KEY_DOWN, VK_SHIFT),
+        at(30, Type::KEY_DOWN, VK_SHIFT),
+        at(40, Type::MOUSE_LEFT_DOWN),
+        at(60, Type::KEY_DOWN, VK_SHIFT),
+        at(90, Type::KEY_DOWN, VK_SHIFT),
+        at(500, Type::MOUSE_LEFT_UP),
+        at(510, Type::KEY_UP, VK_SHIFT),
+    };
+    const auto out = TrimAndRetime(repeating, span(100, 1000));
+    CHECK(types(out) == std::vector<Type>{ Type::KEY_DOWN, Type::MOUSE_LEFT_DOWN,
+                                           Type::MOUSE_LEFT_UP, Type::KEY_UP });
+
+    // A release ends the press, so a new press after it counts from there.
+    const std::vector<InputEvent> pressedAgain = {
+        at(0, Type::KEY_DOWN, VK_SHIFT),
+        at(20, Type::KEY_UP, VK_SHIFT),
+        at(30, Type::MOUSE_LEFT_DOWN),
+        at(40, Type::KEY_DOWN, VK_SHIFT),
+        at(500, Type::KEY_UP, VK_SHIFT),
+        at(510, Type::MOUSE_LEFT_UP),
+    };
+    const auto out2 = TrimAndRetime(pressedAgain, span(100, 1000));
+    CHECK(types(out2) == std::vector<Type>{ Type::MOUSE_LEFT_DOWN, Type::KEY_DOWN,
+                                            Type::KEY_UP, Type::MOUSE_LEFT_UP });
+}
+
+TEST_CASE("A key released before the cut start is not pressed again") {
+    const std::vector<InputEvent> events = {
+        at(0, Type::KEY_DOWN, 'A'),
+        at(50, Type::KEY_UP, 'A'),
+        at(500, Type::KEY_DOWN, 'B'),
+    };
+    const auto out = TrimAndRetime(events, span(100, 1000));
+    REQUIRE(out.size() == 2);
+    CHECK(out[0].virtualKeyCode == 'B');
+}
+
+TEST_CASE("Whatever the cut end leaves held is released at the end") {
+    InputEvent ctrl = at(0, Type::KEY_DOWN, VK_RCONTROL);
+    ctrl.scanCode = 0x1D;
+    ctrl.flags = LLKHF_EXTENDED;
+    const std::vector<InputEvent> events = {
+        ctrl,
+        at(100, Type::MOUSE_LEFT_DOWN),
+        at(150, Type::MOUSE_MOVE, 0, 50, 50),
+        at(900, Type::MOUSE_LEFT_UP),
+        at(950, Type::KEY_UP, VK_RCONTROL),
+    };
+    const auto out = TrimAndRetime(events, span(0, 150));
+    CHECK(types(out) == std::vector<Type>{ Type::KEY_DOWN, Type::MOUSE_LEFT_DOWN,
+                                           Type::MOUSE_MOVE, Type::MOUSE_LEFT_UP,
+                                           Type::KEY_UP });
+    CHECK(timesMs(out) == std::vector<ULONGLONG>{ 0, 100, 150, 150, 150 });
+    // The release is the same key as the press, extended flag and all.
+    CHECK(out.back().virtualKeyCode == VK_RCONTROL);
+    CHECK(out.back().scanCode == 0x1D);
+    CHECK((out.back().flags & LLKHF_EXTENDED) != 0);
+    CHECK((out.back().flags & LLKHF_UP) != 0);
+}
+
+TEST_CASE("A side button held across both cuts is pressed and released") {
+    const std::vector<InputEvent> events = {
+        at(0, Type::MOUSE_X2_DOWN),
+        at(500, Type::MOUSE_WHEEL),
+        at(900, Type::MOUSE_X2_UP),
+    };
+    const auto out = TrimAndRetime(events, span(100, 600));
+    CHECK(types(out) == std::vector<Type>{ Type::MOUSE_X2_DOWN, Type::MOUSE_WHEEL,
+                                           Type::MOUSE_X2_UP });
+    CHECK(timesMs(out) == std::vector<ULONGLONG>{ 0, 400, 400 });
+}
+
+TEST_CASE("A span with no events in it gives nothing, even with keys held") {
+    const std::vector<InputEvent> events = {
+        at(0, Type::KEY_DOWN, 'A'),
+        at(1000, Type::KEY_UP, 'A'),
+    };
+    CHECK(TrimAndRetime(events, span(100, 900)).empty());
+    CHECK(TrimAndRetime(events, span(900, 100)).empty());   // start after end
+    CHECK(TrimAndRetime({}, TrimTiming{}).empty());
+}
+
+TEST_CASE("Events that run backwards play at once instead of wrapping") {
+    const std::vector<InputEvent> events = {
+        at(500, Type::KEY_DOWN, 'A'),
+        at(400, Type::KEY_UP, 'A'),
+        at(600, Type::MOUSE_WHEEL),
+    };
+    const auto out = TrimAndRetime(events, TrimTiming{});
+    CHECK(timesMs(out) == std::vector<ULONGLONG>{ 500, 500, 600 });
+}
+
+TEST_CASE("ReplaceEvents swaps the recording when idle") {
+    FlowEngine engine;
+    CHECK(engine.GetEventCount() == 0);
+    CHECK(engine.ReplaceEvents({}, { at(0, Type::KEY_DOWN, 'A'), at(250, Type::KEY_UP, 'A') }));
+    CHECK(engine.GetEventCount() == 2);
+    CHECK(engine.GetDurationMs() == 250);
+
+    CHECK(engine.ReplaceEvents(engine.GetEvents(), {}));
+    CHECK(engine.GetEventCount() == 0);
+}
+
+TEST_CASE("ReplaceEvents keeps a recording made after the copy was taken") {
+    FlowEngine engine;
+    REQUIRE(engine.ReplaceEvents({}, { at(0, Type::KEY_DOWN, 'A'), at(250, Type::KEY_UP, 'A') }));
+    const std::vector<InputEvent> opened = engine.GetEvents();
+    const auto trimmed = TrimAndRetime(opened, span(0, 100));
+
+    // Recorded with the hotkey while Trim & Timing still held `opened`.
+    REQUIRE(engine.ReplaceEvents(opened, { at(0, Type::KEY_DOWN, 'B'), at(90, Type::KEY_UP, 'B') }));
+
+    CHECK_FALSE(engine.ReplaceEvents(opened, trimmed));
+    const auto now = engine.GetEvents();
+    REQUIRE(now.size() == 2);
+    CHECK(now[0].virtualKeyCode == 'B');
+    CHECK(now[1].timestampUs == 90000);
+}

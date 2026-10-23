@@ -37,7 +37,9 @@ Some antivirus engines flag automation tools that use global input hooks. This i
 | Auto-clicker | Clicks every 1 to 10,000 ms with the left, right or middle button, as a single, double or triple click. It clicks at the cursor or at a fixed point you pick by dragging from the Target field. Jitter varies each interval at random; Stop after ends it after a set count, and 0 runs it until you stop it. |
 
 - Save a macro as a `.rec` file. Open it again with Open, or drop it onto the window.
-- The Settings button holds Customize Hotkeys, Always on Top, Reopen Last Macro on Launch, Clear Recording and About.
+- The Settings button holds Customize Hotkeys, Trim & Timing, Create Play Shortcut, Always on Top, Reopen Last Macro on Launch, Clear Recording and About.
+- Trim & Timing cuts the recording to a span (start and end in milliseconds) and can shorten every pause over a set length, the wait before the first event too. It shows how many events and seconds it keeps before you apply. A key or button held across the cut start is pressed again at the start, and one the cut end leaves held is released at the end.
+- `FLOW.exe --play "macro.rec"` opens that macro, plays it once with the current speed and loop settings, and closes when the run ends. If FLOW is already open, the open window plays it instead. Create Play Shortcut puts such a shortcut on the desktop for the last opened or saved macro. FLOW runs as administrator, so a shortcut shows the UAC prompt each time.
 - FLOW reopens where you left it.
 - Timing runs on the performance counter. Each wait sleeps until the last few milliseconds and spins the rest, and playback keeps to one schedule from the start of the run, so delays stay accurate below a millisecond and do not add up over a long macro.
 - The window is native Win32 drawn with GDI+, and it follows each monitor's DPI scale.
@@ -118,7 +120,7 @@ The raw invocation, in PowerShell from the `Flow` folder, is the build CI runs:
 New-Item -ItemType Directory -Force build | Out-Null
 windres resource.rc -O coff -o build/resource.o
 $src = (Get-ChildItem src -Recurse -Filter *.cpp).FullName
-g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -Werror -mwindows -I include -o build/FLOW.exe $src build/resource.o -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
+g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -Werror -mwindows -I include -o build/FLOW.exe $src build/resource.o -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -lole32 -luuid -static -static-libgcc -static-libstdc++
 ```
 
 The `-static` flag is required: it puts the MinGW runtime (`libwinpthread`, `libstdc++`, `libgcc`) inside the exe, so it runs on machines without MinGW.

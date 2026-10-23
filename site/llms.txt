@@ -2,7 +2,7 @@
 
 > Records mouse and keyboard input on Windows and plays it back, with a separate auto-clicker.
 
-Flow is one file, `FLOW.exe`, for 64-bit Windows 10 and 11. It needs no install and starts as administrator, so it can record and replay input in elevated windows too. It has no command line and no network access.
+Flow is one file, `FLOW.exe`, for 64-bit Windows 10 and 11. It needs no install and starts as administrator, so it can record and replay input in elevated windows too. It has no network access. Its only command line, `FLOW.exe --play "macro.rec"`, plays one saved recording and closes.
 
 - Hotkeys, changeable in Settings, then Customize Hotkeys: F8 starts or stops recording, F9 starts or stops playback, F6 starts or stops the auto-clicker, Pause stops everything.
 - Playback runs at 0.1 to 100 times the recorded speed, 1 to 999 times or until stopped, with optional random timing variation.

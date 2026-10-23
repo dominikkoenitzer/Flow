@@ -35,6 +35,8 @@
                 "-lcomctl32",
                 "-lgdiplus",
                 "-lshell32",
+                "-lole32",
+                "-luuid",
                 "-static",
                 "-static-libgcc",
                 "-static-libstdc++"
