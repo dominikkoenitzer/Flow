@@ -33,5 +33,6 @@ FLOW is, by design, a privileged input-automation tool. The following are inhere
 - **It requires Administrator rights.** Windows does not let a normal process replay input into an elevated window or record input while one has focus, so FLOW runs elevated to work in every window.
 - **Antivirus / SmartScreen warnings.** The binary is unsigned and uses global input hooks, so some engines flag it. That is a false positive inherent to this category of software. Verify the published SHA-256 if you want assurance the download is intact.
 - **It can synthesize input.** Recording and replaying keystrokes/clicks is the entire purpose of the tool.
+- **`FLOW.exe --play` plays a macro file.** A second launch hands the file to an open FLOW window with a window message. Windows only delivers that message from another elevated process, so a non-elevated program cannot start a run without the UAC prompt.
 
-Genuine security issues are in scope and very welcome: memory-safety bugs reachable from a crafted `.rec` macro file, privilege-escalation paths beyond the intended elevation, or unsafe handling of the settings and macro files.
+Genuine security issues are in scope and very welcome: memory-safety bugs reachable from a crafted `.rec` macro file, privilege-escalation paths beyond the intended elevation, unsafe handling of the settings and macro files, or a way for a non-elevated process to make an open FLOW window play a macro.

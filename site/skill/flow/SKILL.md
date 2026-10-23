@@ -7,7 +7,7 @@ description: Explains how to use Flow, a Windows tool that records mouse and key
 
 Flow records what you do with the mouse and keyboard and plays it back. It also has an auto-clicker that clicks at a fixed interval. It is one file, `FLOW.exe`, for 64-bit Windows 10 and 11. Its window title reads `FLOW`.
 
-Flow has no command line, no scripting interface and no network access. You cannot start or control it from a script. Help the user by explaining the steps, by reading or preparing its settings file, and by inspecting or editing saved recordings when they ask.
+Flow has no scripting interface and no network access. Its only command line is `FLOW.exe --play "macro.rec"`, which plays one saved recording (see Playing from a shortcut). Help the user by explaining the steps, by reading or preparing its settings file, and by inspecting or editing saved recordings when they ask.
 
 ## Install, update, remove
 
@@ -53,6 +53,22 @@ Recorded input: mouse moves, left, right and middle clicks, the two side buttons
 - A file Flow cannot read shows "That file isn't a valid FLOW macro (.rec)." and the recording in memory stays as it was.
 
 The `.rec` format is binary. Read [references/rec-format.md](references/rec-format.md) before inspecting or changing one.
+
+## Trimming and pauses
+
+Settings, then Trim & Timing, edits the recording in memory. It is greyed out while recording or playing, and when the recording is empty.
+- Start at and End at (ms): keep only the events in that span, counted from the start of the recording. Leave a field empty to keep everything on that side. The end is inclusive.
+- Shorten pauses over (ms): every wait longer than this becomes this long, the wait before the first event too. Leave it empty to keep the timing.
+- The line under the fields says how many events and seconds the result keeps. Apply replaces the recording in memory; Cancel leaves it as it was. Save afterwards to keep the result in a file.
+- A cut start moves the cursor to where it was and presses again any key or button held at that moment. Keys and buttons the cut end leaves held are released at the end, so a trimmed recording never leaves a key stuck down.
+
+## Playing from a shortcut
+
+- `FLOW.exe --play "C:\path\macro.rec"` opens that file and plays it with the speed, loop and humanize settings from the settings file, then closes when the run ends. It starts minimised and does not take the focus. Pause stops it as usual.
+- If Flow is already open, the open window plays the file instead and stays open. It refuses while it is recording, playing, or showing a dialog, and says so.
+- Settings, then Create Play Shortcut, saves such a shortcut (`.lnk`) for the last opened or saved macro, on the desktop by default. It is greyed out until a macro has been opened or saved.
+- Flow runs as administrator, so every launch from a shortcut shows the UAC prompt. A program that is not elevated cannot hand a file to an open Flow window; Windows blocks it.
+- A launch with `--play` and no file shows a usage message. A file Flow cannot read shows the invalid-macro message, and Flow does not start.
 
 ## Auto-clicker
 
