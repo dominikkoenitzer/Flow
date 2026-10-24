@@ -93,6 +93,14 @@ double ScaleGapUs(ULONGLONG gapUs, double speed) {
     return static_cast<double>(gapUs) / speed;
 }
 
+double ParseSpeedText(const wchar_t* text) {
+    double v = wcstod(text, nullptr);
+    // Written as a negation so NaN, which fails every comparison, takes the floor.
+    if (!(v >= 0.1)) v = 0.1;
+    if (v > 100.0) v = 100.0;
+    return v;
+}
+
 ULONGLONG TicksToUs(LONGLONG startTicks, LONGLONG nowTicks, LONGLONG frequency) {
     if (frequency <= 0 || nowTicks <= startTicks) return 0;
     const LONGLONG delta = nowTicks - startTicks;
