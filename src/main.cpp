@@ -53,7 +53,14 @@ enum PlayReply : LRESULT {
     PLAY_STARTED = 1,
     PLAY_BUSY = 2,        // recording, playing, or a dialog is open
     PLAY_BAD_FILE = 3,
+    PLAY_EMPTY = 4,       // a macro without events
 };
+
+// What the user is told when the macro given to --play does not load.
+static std::wstring PlayLoadFailure(bool empty, const std::wstring& macro) {
+    return (empty ? L"That macro has no events to play:\n"
+                  : L"That file isn't a valid FLOW macro (.rec):\n") + macro;
+}
 
 // Set when this FLOW was started by --play: it closes once the run ends.
 static bool g_closeAfterPlay = false;
@@ -839,7 +846,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (g_app.isRecording || g_app.isPlaying || g_app.engine->IsPlaybackActive()
                 || !IsWindowEnabled(hwnd))
                 return PLAY_BUSY;
-            if (!g_app.engine->LoadMacro(path)) return PLAY_BAD_FILE;
+            const FlowEngine::PlayLoad loaded = g_app.engine->LoadMacroToPlay(path);
+            if (loaded == FlowEngine::PlayLoad::Invalid) return PLAY_BAD_FILE;
+            if (loaded == FlowEngine::PlayLoad::Empty) return PLAY_EMPTY;
             g_app.lastMacroPath = path;
             SaveSettings();
             TogglePlayback(hwnd);
@@ -1013,8 +1022,8 @@ static bool HandPlayToOpenWindow(const std::wstring& macro) {
         MessageBoxW(NULL, L"FLOW is recording, playing or has a dialog open. "
                     L"Finish that, then start the shortcut again.",
                     L"FLOW", MB_OK | MB_ICONWARNING);
-    } else if (reply == PLAY_BAD_FILE) {
-        MessageBoxW(NULL, (L"That file isn't a valid FLOW macro (.rec):\n" + macro).c_str(),
+    } else if (reply == PLAY_BAD_FILE || reply == PLAY_EMPTY) {
+        MessageBoxW(NULL, PlayLoadFailure(reply == PLAY_EMPTY, macro).c_str(),
                     L"FLOW", MB_OK | MB_ICONWARNING);
     } else if (reply != PLAY_STARTED) {
         MessageBoxW(NULL, L"FLOW is open but did not take the macro. "
@@ -1182,8 +1191,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     if (launch.play) {
         // A run from a shortcut leaves the last macro setting as it was.
-        if (!g_app.engine->LoadMacro(playMacro)) {
-            MessageBoxW(NULL, (L"That file isn't a valid FLOW macro (.rec):\n" + playMacro).c_str(),
+        const FlowEngine::PlayLoad loaded = g_app.engine->LoadMacroToPlay(playMacro);
+        if (loaded != FlowEngine::PlayLoad::Loaded) {
+            MessageBoxW(NULL, PlayLoadFailure(loaded == FlowEngine::PlayLoad::Empty, playMacro).c_str(),
                         L"FLOW", MB_OK | MB_ICONWARNING);
             delete g_app.engine;
             return 1;

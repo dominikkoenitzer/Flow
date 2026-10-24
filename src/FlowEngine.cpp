@@ -1019,7 +1019,11 @@ bool FlowEngine::SaveMacro(const std::wstring& filename) {
     return !file.fail();  // a full disk fails the write or the flush on close
 }
 
-bool FlowEngine::LoadMacro(const std::wstring& filename) {
+namespace {
+
+// Decode the macro in `filename` into an empty `loaded`. False for a file
+// that is not a macro, with `loaded` then holding part of it.
+bool readMacro(const std::wstring& filename, std::vector<InputEvent>& loaded) {
     std::ifstream file(std::filesystem::path(filename), std::ios::binary);
     if (!file.is_open()) return false;
 
@@ -1070,10 +1074,6 @@ bool FlowEngine::LoadMacro(const std::wstring& filename) {
     file.read(&bytes[0], static_cast<std::streamsize>(bytes.size()));
     if (!file) return false;
     in = bytes.data();
-
-    // Decode into a scratch buffer, so a file that fails part way through
-    // leaves the macro already loaded as it was, not half replaced.
-    std::vector<InputEvent> loaded;
     loaded.reserve(static_cast<size_t>(count));
 
     // Playback subtracts consecutive timestamps, so one that moves backwards
@@ -1089,10 +1089,31 @@ bool FlowEngine::LoadMacro(const std::wstring& filename) {
         lastTimestamp = event.timestampUs;
         loaded.push_back(event);
     }
+    return true;
+}
+
+}  // namespace
+
+bool FlowEngine::LoadMacro(const std::wstring& filename) {
+    // Decode into a scratch buffer, so a file that fails part way through
+    // leaves the macro already loaded as it was, not half replaced.
+    std::vector<InputEvent> loaded;
+    if (!readMacro(filename, loaded)) return false;
 
     std::lock_guard<std::mutex> lock(recordMutex);
     recordedEvents.swap(loaded);
     return true;
+}
+
+FlowEngine::PlayLoad FlowEngine::LoadMacroToPlay(const std::wstring& filename) {
+    std::vector<InputEvent> loaded;
+    if (!readMacro(filename, loaded)) return PlayLoad::Invalid;
+    // A run of no events ends at once, so it would end unseen.
+    if (loaded.empty()) return PlayLoad::Empty;
+
+    std::lock_guard<std::mutex> lock(recordMutex);
+    recordedEvents.swap(loaded);
+    return PlayLoad::Loaded;
 }
 
 } // namespace flow
