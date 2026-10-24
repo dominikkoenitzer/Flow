@@ -312,9 +312,7 @@ LRESULT CALLBACK InputEditProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id, 
 static void ApplySpeedEdit(HWND hwnd) {
     wchar_t buf[32];
     GetDlgItemTextW(hwnd, EDIT_SPEED, buf, 32);
-    double v = wcstod(buf, nullptr);
-    if (v < 0.1) v = 0.1;
-    if (v > 100.0) v = 100.0;
+    const double v = ParseSpeedText(buf);
     SetPlaybackSpeed((float)v);
     wchar_t out[32];
     swprintf(out, 32, L"%g", v);
