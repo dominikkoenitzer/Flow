@@ -13,6 +13,7 @@
 #include "Hotkeys.h"
 #include "LaunchArgs.h"
 #include "Shortcut.h"
+#include "StartupLock.h"
 #include "ui/Buttons.h"
 #include "ui/Dialogs.h"
 #include "ui/Dpi.h"
@@ -61,6 +62,12 @@ static std::wstring PlayLoadFailure(bool empty, const std::wstring& macro) {
     return (empty ? L"That macro has no events to play:\n"
                   : L"That file isn't a valid FLOW macro (.rec):\n") + macro;
 }
+
+// Held by each start from before it looks for the open window until its own
+// window can take a file (see StartupLock.h). The wait covers a slow start; a
+// start that waited that long goes on without the lock, as before.
+static const wchar_t STARTUP_LOCK[] = L"Local\\FLOW_Modern_startup";
+static const DWORD STARTUP_WAIT_MS = 15000;
 
 // Set when this FLOW was started by --play: it closes once the run ends.
 static bool g_closeAfterPlay = false;
@@ -1007,9 +1014,11 @@ static LaunchArgs ReadLaunchArgs() {
 
 // Give `macro` to the FLOW window already open, if there is one. Returns
 // true when there was one, having told the user if it did not start the run.
-static bool HandPlayToOpenWindow(const std::wstring& macro) {
+// The lookup needs the startup lock; once a window is found, the lock goes.
+static bool HandPlayToOpenWindow(const std::wstring& macro, StartupLock& startup) {
     HWND open = FindWindowW(L"FLOW_Modern", NULL);
     if (!open) return false;
+    startup.Release();
     COPYDATASTRUCT cds = {};
     cds.dwData = COPY_PLAY;
     cds.cbData = (DWORD)((macro.size() + 1) * sizeof(wchar_t));
@@ -1041,13 +1050,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         MessageBoxW(NULL, L"Usage: FLOW.exe --play \"macro.rec\"", L"FLOW", MB_OK | MB_ICONINFORMATION);
         return 1;
     }
+    StartupLock startup(STARTUP_LOCK, STARTUP_WAIT_MS);
     std::wstring playMacro;
     if (launch.play) {
         // The open FLOW may run in another folder, so it gets the full path.
         wchar_t full[32768];
         const DWORD n = GetFullPathNameW(launch.macro.c_str(), 32768, full, NULL);
         playMacro = (n > 0 && n < 32768) ? std::wstring(full) : launch.macro;
-        if (HandPlayToOpenWindow(playMacro)) return 0;
+        if (HandPlayToOpenWindow(playMacro, startup)) return 0;
     }
 
     // High-DPI awareness for crisp rendering
@@ -1228,6 +1238,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         g_closeAfterPlay = true;
         TogglePlayback(g_app.hwnd);
     }
+
+    // The window answers a handed-over file from here on.
+    startup.Release();
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
