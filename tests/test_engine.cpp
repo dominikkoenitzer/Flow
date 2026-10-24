@@ -166,6 +166,21 @@ TEST_CASE("A scaled gap never divides by a zero or negative speed") {
     CHECK(flow::ScaleGapUs(1000, -3.0) == doctest::Approx(100000.0));
 }
 
+TEST_CASE("The speed field keeps its value between 0.1 and 100") {
+    CHECK(flow::ParseSpeedText(L"2.5") == 2.5);
+    CHECK(flow::ParseSpeedText(L"0.05") == 0.1);
+    CHECK(flow::ParseSpeedText(L"250") == 100.0);
+    CHECK(flow::ParseSpeedText(L"") == 0.1);
+    CHECK(flow::ParseSpeedText(L"fast") == 0.1);
+}
+
+TEST_CASE("The speed field reads nan and infinity as numbers in range") {
+    CHECK(flow::ParseSpeedText(L"nan") == 0.1);
+    CHECK(flow::ParseSpeedText(L"-nan") == 0.1);
+    CHECK(flow::ParseSpeedText(L"inf") == 100.0);
+    CHECK(flow::ParseSpeedText(L"-inf") == 0.1);
+}
+
 TEST_CASE("NextVariance is the bias alone when the spread is zero") {
     flow::HumanizationEngine humanizer(4.0, 0.0);
     CHECK(humanizer.NextVariance() == doctest::Approx(4.0));
