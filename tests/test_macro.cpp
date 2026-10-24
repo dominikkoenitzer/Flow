@@ -279,6 +279,63 @@ TEST_CASE("A version 2 file with a type past the last known one is rejected") {
     CHECK_FALSE(engine.LoadMacro(file.path));
 }
 
+TEST_CASE("A key event with a key code past 255 is rejected") {
+    // Playback sends the code as a 16-bit key and tracks held keys only below
+    // 256, so such a key could stay down after a stop.
+    const uint32_t keyDown = static_cast<uint32_t>(InputEvent::Type::KEY_DOWN);
+    const uint32_t keyUp = static_cast<uint32_t>(InputEvent::Type::KEY_UP);
+    FlowEngine engine;
+
+    ScratchFile lastKey(L"vk_255");
+    auto bytes = headerV2(flow::MACRO_FORMAT_VERSION, 2);
+    appendV2Event(bytes, keyDown, 0, 0, 255, 0, 0, 0, 0);
+    appendV2Event(bytes, keyUp, 0, 0, 255, 10, 0, 0, 0);
+    writeBytes(lastKey.path, bytes);
+    CHECK(engine.LoadMacro(lastKey.path));
+
+    ScratchFile down(L"vk_256_down");
+    bytes = headerV2(flow::MACRO_FORMAT_VERSION, 1);
+    appendV2Event(bytes, keyDown, 0, 0, 256, 0, 0, 0, 0);
+    writeBytes(down.path, bytes);
+    CHECK_FALSE(engine.LoadMacro(down.path));
+
+    ScratchFile up(L"vk_max_up");
+    bytes = headerV2(flow::MACRO_FORMAT_VERSION, 1);
+    appendV2Event(bytes, keyUp, 0, 0, 0xFFFFFFFFu, 0, 0, 0, 0);
+    writeBytes(up.path, bytes);
+    CHECK_FALSE(engine.LoadMacro(up.path));
+
+    ScratchFile legacy(L"vk_256_legacy");
+    bytes = header(1);
+    appendV1Event(bytes, keyDown, 0, 0, 256, 0, 0, 0);
+    writeBytes(legacy.path, bytes);
+    CHECK_FALSE(engine.LoadMacro(legacy.path));
+}
+
+TEST_CASE("A timestamp playback cannot wait for is rejected") {
+    // At the slowest speed playback waits 100 times a timestamp, on a signed
+    // 64-bit clock. 2^53 microseconds, about 285 years, is the most a file holds.
+    const uint64_t most = 1ULL << 53;
+    FlowEngine engine;
+
+    ScratchFile longest(L"ts_most");
+    auto bytes = headerV2(flow::MACRO_FORMAT_VERSION, 2);
+    appendV2Event(bytes, 0, 0, 0, 0, 0, 0, 0, 0);
+    appendV2Event(bytes, 0, 0, 0, 0, most, 0, 0, 0);
+    writeBytes(longest.path, bytes);
+    CHECK(engine.LoadMacro(longest.path));
+
+    for (const uint64_t past : {most + 1, 1ULL << 63, ~0ULL}) {
+        CAPTURE(past);
+        ScratchFile file(L"ts_past");
+        bytes = headerV2(flow::MACRO_FORMAT_VERSION, 2);
+        appendV2Event(bytes, 0, 0, 0, 0, 0, 0, 0, 0);
+        appendV2Event(bytes, 0, 0, 0, 0, past, 0, 0, 0);
+        writeBytes(file.path, bytes);
+        CHECK_FALSE(engine.LoadMacro(file.path));
+    }
+}
+
 TEST_CASE("The control hotkeys are filtered out of a recording") {
     // Record F8, play F9, clicker F6, stop Pause by default. Capturing those
     // would replay them and stop or restart the macro partway through.
