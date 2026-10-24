@@ -139,6 +139,16 @@ void appendV1Event(std::vector<char>& bytes, uint32_t type, int32_t x, int32_t y
 
 }  // namespace
 
+namespace flow {
+/** Sets the busy flags directly; StartRecording would install real hooks. */
+struct TestAccess {
+    static void setBusy(FlowEngine& engine, bool recording, bool playing) {
+        engine.isRecording.store(recording);
+        engine.isPlaying.store(playing);
+    }
+};
+}  // namespace flow
+
 TEST_CASE("A fresh engine has nothing recorded") {
     FlowEngine engine;
     CHECK(engine.GetEventCount() == 0);
@@ -349,6 +359,27 @@ TEST_CASE("Loading replaces whatever was already recorded") {
 
     REQUIRE(loader.LoadMacro(file.path));
     CHECK(loader.GetEventCount() == 7);  // not 9: the earlier events are gone
+}
+
+TEST_CASE("LoadMacro refuses a file while recording or playing and keeps the macro") {
+    ScratchFile file(L"busy");
+    FlowEngine recorder;
+    recordSample(recorder);
+    REQUIRE(recorder.SaveMacro(file.path));
+
+    FlowEngine engine;
+    pushMouse(engine, WM_LBUTTONDOWN, 1, 1);
+    pushMouse(engine, WM_LBUTTONUP, 1, 1);
+
+    SUBCASE("recording") { flow::TestAccess::setBusy(engine, true, false); }
+    SUBCASE("playing") { flow::TestAccess::setBusy(engine, false, true); }
+
+    CHECK_FALSE(engine.LoadMacro(file.path));
+    CHECK(engine.GetEventCount() == 2);
+
+    flow::TestAccess::setBusy(engine, false, false);
+    CHECK(engine.LoadMacro(file.path));
+    CHECK(engine.GetEventCount() == 7);
 }
 
 TEST_CASE("An empty macro round trips") {
