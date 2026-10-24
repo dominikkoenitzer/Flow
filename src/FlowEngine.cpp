@@ -1089,6 +1089,12 @@ bool readMacro(const std::wstring& filename, std::vector<InputEvent>& loaded) {
         if (!decodeEvent(in, version, event)) return false;
         in += recordSize;
         if (event.timestampUs < lastTimestamp) return false;
+        if (event.timestampUs > MACRO_MAX_TIMESTAMP_US) return false;
+        // Playback presses a key by a 16-bit code and releases held keys after
+        // a stop only below 256, the range the keyboard hook records.
+        const bool isKey = event.type == InputEvent::Type::KEY_DOWN
+                        || event.type == InputEvent::Type::KEY_UP;
+        if (isKey && event.virtualKeyCode > 255) return false;
         lastTimestamp = event.timestampUs;
         loaded.push_back(event);
     }
