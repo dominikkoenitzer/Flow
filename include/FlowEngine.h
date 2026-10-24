@@ -115,6 +115,9 @@ constexpr size_t MACRO_EVENT_SIZE_V2 = 36;
 /** @brief What follows "FLOW" in a versioned file, before the version */
 constexpr uint64_t MACRO_VERSION_MARKER = 0xFFFFFFFFFFFFFFFFULL;
 
+/** @brief Latest timestamp a file may hold, about 285 years; playback waits up to 100 times it on a signed 64-bit clock */
+constexpr uint64_t MACRO_MAX_TIMESTAMP_US = 1ULL << 53;
+
 // ---- trim and timing ----
 
 /**
