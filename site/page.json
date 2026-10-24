@@ -146,19 +146,18 @@
     }
   ],
   "new": {
-    "label": "Built 10 October 2026",
+    "label": "Built 24 October 2026",
     "version": "",
     "items": [
-      "The auto-clicker has its own options: button, single, double or triple click, jitter and a click limit.",
-      "Pick a fixed click point by dragging from the Target field.",
-      "The window follows each monitor's scale.",
-      "Settings save as soon as they change.",
-      "The window always opens inside the work area, clear of the taskbar."
+      "Trim &amp; Timing in the Settings menu cuts a recording and shortens its pauses. Field text it cannot read is refused.",
+      "<code>FLOW.exe --play</code> plays a macro, and Create Play Shortcut makes a shortcut that does it.",
+      "Two shortcuts started at the same moment open one FLOW.",
+      "A recording made while Trim &amp; Timing is open is kept, and keys held at a trim start are pressed again in their recorded order."
     ]
   },
   "requirements": [
     "Windows 10 or 11, 64-bit",
-    "About 3 MB to download",
+    "About 4 MB to download",
     "Administrator rights, asked for when it starts",
     "No install and no internet connection"
   ],
