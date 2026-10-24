@@ -281,3 +281,42 @@ TEST_CASE("ReplaceEvents keeps a recording made after the copy was taken") {
     CHECK(now[0].virtualKeyCode == 'B');
     CHECK(now[1].timestampUs == 90000);
 }
+
+TEST_CASE("The trim fields read whole milliseconds") {
+    TrimTiming trim;
+    REQUIRE(flow::ReadTrimTiming(L"250", L"1000", L"40", trim));
+    CHECK(trim.startUs == 250000);
+    CHECK(trim.endUs == 1000999);
+    CHECK(trim.maxGapUs == 40000);
+
+    REQUIRE(flow::ReadTrimTiming(L" 7", L"999999999 ", L" 0 ", trim));
+    CHECK(trim.startUs == 7000);
+    CHECK(trim.endUs == 999999999999ULL);
+    CHECK(trim.maxGapUs == 0);
+}
+
+TEST_CASE("Empty trim fields keep the whole recording and every pause") {
+    TrimTiming trim;
+    trim.startUs = 1;
+    REQUIRE(flow::ReadTrimTiming(L"", L"", L"  ", trim));
+    CHECK(trim.startUs == 0);
+    CHECK(trim.endUs == ~0ULL);
+    CHECK(trim.maxGapUs == 0);
+}
+
+TEST_CASE("A trim field holding more than digits does not read") {
+    // ES_NUMBER refuses these when typed, but a paste puts them in the field.
+    const wchar_t* const pasted[] = { L"1.5", L"-1", L"+5", L"1e3", L"12a", L"0x10",
+                                      L"1 000", L"1,000", L"1234567890", L"\t5" };
+    for (size_t i = 0; i < sizeof(pasted) / sizeof(pasted[0]); ++i) {
+        const wchar_t* text = pasted[i];
+        CAPTURE(i);
+        TrimTiming trim = span(10, 20, 5);
+        CHECK_FALSE(flow::ReadTrimTiming(text, L"20", L"5", trim));
+        CHECK_FALSE(flow::ReadTrimTiming(L"10", text, L"5", trim));
+        CHECK_FALSE(flow::ReadTrimTiming(L"10", L"20", text, trim));
+        CHECK(trim.startUs == 10000);
+        CHECK(trim.endUs == 20000);
+        CHECK(trim.maxGapUs == 5000);
+    }
+}
