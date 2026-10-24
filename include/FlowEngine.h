@@ -710,6 +710,18 @@ public:
      */
     bool LoadMacro(const std::wstring& filename);
 
+    /** @brief What LoadMacroToPlay made of a file */
+    enum class PlayLoad { Loaded, Empty, Invalid };
+
+    /**
+     * @brief LoadMacro for a run started from outside FLOW, by --play
+     * @param filename Input file path
+     * @return Loaded when the file's events replaced the macro. Empty for a
+     *         macro without events, Invalid for a file LoadMacro refuses; both
+     *         leave the loaded macro as it was.
+     */
+    PlayLoad LoadMacroToPlay(const std::wstring& filename);
+
     // ===== Internal Event Handlers =====
     
     /** @internal Process captured mouse event */
