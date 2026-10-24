@@ -1098,6 +1098,9 @@ bool readMacro(const std::wstring& filename, std::vector<InputEvent>& loaded) {
 }  // namespace
 
 bool FlowEngine::LoadMacro(const std::wstring& filename) {
+    // As in ReplaceEvents, a recording or a run in progress still owns the buffer.
+    if (isRecording.load() || isPlaying.load()) return false;
+
     // Decode into a scratch buffer, so a file that fails part way through
     // leaves the macro already loaded as it was, not half replaced.
     std::vector<InputEvent> loaded;

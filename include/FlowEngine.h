@@ -446,6 +446,7 @@ private:
  * @warning Only one FlowEngine instance should exist per process
  */
 class FlowEngine {
+    friend struct TestAccess;  // lets the tests mark the engine busy without hooks or real input
 private:
     // ===== Static Hook Management =====
     static HHOOK mouseHook;         ///< Global mouse hook handle
@@ -706,7 +707,8 @@ public:
     /**
      * @brief Load macro from binary file
      * @param filename Input file path
-     * @return true if loaded successfully, false otherwise
+     * @return true if loaded successfully, false otherwise, and false,
+     *         changing nothing, while recording or playing back
      */
     bool LoadMacro(const std::wstring& filename);
 
