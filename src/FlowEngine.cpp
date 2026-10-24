@@ -491,7 +491,41 @@ const EventType BUTTON_UP[5] = { EventType::MOUSE_LEFT_UP, EventType::MOUSE_RIGH
                                  EventType::MOUSE_MIDDLE_UP, EventType::MOUSE_X1_UP,
                                  EventType::MOUSE_X2_UP };
 
+// One Trim & Timing field: up to nine digits with spaces around them, or only
+// spaces, which leaves `ms` and `given` as they are.
+bool readTrimField(const wchar_t* text, ULONGLONG& ms, bool& given) {
+    while (*text == L' ') ++text;
+    ULONGLONG value = 0;
+    int digits = 0;
+    for (; *text >= L'0' && *text <= L'9'; ++text) {
+        if (++digits > 9) return false;
+        value = value * 10 + static_cast<ULONGLONG>(*text - L'0');
+    }
+    while (*text == L' ') ++text;
+    if (*text != L'\0') return false;
+    if (digits > 0) {
+        ms = value;
+        given = true;
+    }
+    return true;
+}
+
 }  // namespace
+
+bool ReadTrimTiming(const wchar_t* startMs, const wchar_t* endMs, const wchar_t* maxGapMs,
+                    TrimTiming& trim) {
+    ULONGLONG start = 0, end = 0, gap = 0;
+    bool startGiven = false, endGiven = false, gapGiven = false;
+    if (!readTrimField(startMs, start, startGiven) || !readTrimField(endMs, end, endGiven)
+        || !readTrimField(maxGapMs, gap, gapGiven))
+        return false;
+    TrimTiming read;
+    read.startUs = start * 1000;
+    if (endGiven) read.endUs = end * 1000 + 999;
+    read.maxGapUs = gap * 1000;
+    trim = read;
+    return true;
+}
 
 std::vector<InputEvent> TrimAndRetime(const std::vector<InputEvent>& events,
                                       const TrimTiming& trim) {
