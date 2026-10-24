@@ -618,24 +618,28 @@ static void LayoutTrimDialog(HWND hDlg) {
     PlaceControls(hDlg, places, sizeof(places) / sizeof(places[0]));
 }
 
-// The span and pause limit the three fields ask for. An empty start or pause
-// field reads as 0, an empty end as the whole recording. The end keeps every
-// event within the millisecond it names.
-static TrimTiming ReadTrimFields(HWND hDlg) {
-    TrimTiming trim;
-    BOOL ok = FALSE;
-    UINT v = GetDlgItemInt(hDlg, IDC_TT_START, &ok, FALSE);
-    if (ok) trim.startUs = (ULONGLONG)v * 1000;
-    v = GetDlgItemInt(hDlg, IDC_TT_END, &ok, FALSE);
-    if (ok) trim.endUs = (ULONGLONG)v * 1000 + 999;
-    v = GetDlgItemInt(hDlg, IDC_TT_GAP, &ok, FALSE);
-    if (ok) trim.maxGapUs = (ULONGLONG)v * 1000;
-    return trim;
-}
+static const int TT_FIELDS[3] = { IDC_TT_START, IDC_TT_END, IDC_TT_GAP };
+static std::wstring s_trimText[3];   // each field's text when the fields last read
 
 // Work out the result of the fields as they stand and say what it would be.
-static void UpdateTrimPreview(HWND hDlg) {
-    s_trimResult = TrimAndRetime(s_trimSource, ReadTrimFields(hDlg));
+// ES_NUMBER does not stop a paste, so a `changed` field whose text does not
+// read goes back to its last text, and the fields show what Apply would use.
+static void UpdateTrimPreview(HWND hDlg, int changed) {
+    wchar_t fields[3][32];
+    for (int i = 0; i < 3; ++i) GetDlgItemTextW(hDlg, TT_FIELDS[i], fields[i], 32);
+    TrimTiming trim;
+    if (!ReadTrimTiming(fields[0], fields[1], fields[2], trim)) {
+        for (int i = 0; i < 3; ++i) {
+            if (TT_FIELDS[i] != changed) continue;
+            MessageBeep(MB_ICONWARNING);
+            SetDlgItemTextW(hDlg, changed, s_trimText[i].c_str());
+            const WPARAM end = s_trimText[i].size();
+            SendDlgItemMessageW(hDlg, changed, EM_SETSEL, end, end);
+        }
+        return;
+    }
+    for (int i = 0; i < 3; ++i) s_trimText[i] = fields[i];
+    s_trimResult = TrimAndRetime(s_trimSource, trim);
     wchar_t text[128];
     if (s_trimResult.empty()) {
         wcscpy(text, L"Nothing to keep in that span.");
@@ -706,7 +710,7 @@ LRESULT CALLBACK TrimDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lP
         case WM_COMMAND: {
             const int id = LOWORD(wParam), code = HIWORD(wParam);
             if (id == IDC_TT_START || id == IDC_TT_END || id == IDC_TT_GAP) {
-                if (code == EN_CHANGE) UpdateTrimPreview(hDlg);
+                if (code == EN_CHANGE) UpdateTrimPreview(hDlg, id);
                 else if (code == EN_SETFOCUS || code == EN_KILLFOCUS) InvalidateRect(hDlg, NULL, TRUE);
                 break;
             }
@@ -784,7 +788,7 @@ bool ShowTrimTimingDialog(HWND hwnd) {
         CreateWindowExW(0, L"EDIT", text,
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | ES_RIGHT | ES_NUMBER,
             0, 0, 0, 0, hDlg, (HMENU)(LONG_PTR)id, hi, NULL);
-        SendDlgItemMessageW(hDlg, id, EM_LIMITTEXT, 9, 0);   // under 2^32 ms, so GetDlgItemInt reads it
+        SendDlgItemMessageW(hDlg, id, EM_LIMITTEXT, 9, 0);   // the nine digits ReadTrimTiming takes
     };
 
     const ULONGLONG lengthMs = s_trimSource.back().timestampUs / 1000;
@@ -810,7 +814,7 @@ bool ShowTrimTimingDialog(HWND hwnd) {
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
         0, 0, 0, 0, hDlg, (HMENU)IDC_TT_CANCEL, hi, NULL);
 
-    UpdateTrimPreview(hDlg);
+    UpdateTrimPreview(hDlg, 0);
 
     // Centre on the parent, laid out for the monitor the dialog lands on.
     UINT dpi = 96;

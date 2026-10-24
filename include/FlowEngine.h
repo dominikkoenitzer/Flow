@@ -144,6 +144,18 @@ struct TrimTiming {
 std::vector<InputEvent> TrimAndRetime(const std::vector<InputEvent>& events,
                                       const TrimTiming& trim);
 
+/**
+ * @brief The span and pause limit the Trim & Timing fields ask for
+ * @param startMs, endMs, maxGapMs The text of the three fields, in milliseconds
+ * @param trim Set to what the fields ask for when they all read
+ * @return false, leaving `trim` alone, when a field holds anything but up to
+ *         nine digits with spaces around them. An empty start or pause field
+ *         reads as 0, an empty end as the whole recording. The end keeps every
+ *         event within the millisecond it names.
+ */
+bool ReadTrimTiming(const wchar_t* startMs, const wchar_t* endMs, const wchar_t* maxGapMs,
+                    TrimTiming& trim);
+
 // ---- HighResTimer ----
 
 /**
