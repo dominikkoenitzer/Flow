@@ -125,6 +125,12 @@ void UpdateWindowState() {
 
 // ---- file operations ----
 
+// LoadMacro refuses a file then, so a busy window skips the load rather than report a bad file.
+static bool MacroInUse() {
+    return g_app.isRecording || g_app.isPlaying
+        || g_app.engine->IsRecordingActive() || g_app.engine->IsPlaybackActive();
+}
+
 void OpenMacroFile(HWND hwnd) {
     wchar_t szFile[MAX_PATH] = {0};
     OPENFILENAMEW ofn = {};
@@ -136,7 +142,8 @@ void OpenMacroFile(HWND hwnd) {
     ofn.lpstrTitle = L"Open Macro File";
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
     
-    if (GetOpenFileNameW(&ofn)) {
+    // The hotkeys still work while the dialog is open.
+    if (GetOpenFileNameW(&ofn) && !MacroInUse()) {
         if (!g_app.engine->LoadMacro(szFile)) {
             MessageBoxA(hwnd, "Failed to load macro file!", "Error", MB_OK | MB_ICONERROR);
         } else {
@@ -827,7 +834,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // Load a .rec dropped onto the window.
             HDROP drop = (HDROP)wParam;
             wchar_t path[MAX_PATH] = {0};
-            if (DragQueryFileW(drop, 0, path, MAX_PATH) && g_app.engine) {
+            if (DragQueryFileW(drop, 0, path, MAX_PATH) && g_app.engine && !MacroInUse()) {
                 if (g_app.engine->LoadMacro(path)) {
                     g_app.lastMacroPath = path;
                     SaveSettings();
