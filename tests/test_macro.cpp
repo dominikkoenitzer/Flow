@@ -363,6 +363,37 @@ TEST_CASE("An empty macro round trips") {
     CHECK(loader.GetEventCount() == 0);
 }
 
+TEST_CASE("--play refuses a macro without events and keeps the loaded one") {
+    ScratchFile file(L"empty_play");
+    FlowEngine saver;
+    REQUIRE(saver.SaveMacro(file.path));
+
+    FlowEngine player;
+    pushMouse(player, WM_LBUTTONDOWN, 1, 1);
+    pushMouse(player, WM_LBUTTONUP, 1, 1);
+    CHECK(player.LoadMacroToPlay(file.path) == FlowEngine::PlayLoad::Empty);
+    CHECK(player.GetEventCount() == 2);
+}
+
+TEST_CASE("--play refuses a file that is not a macro and keeps the loaded one") {
+    FlowEngine player;
+    pushMouse(player, WM_LBUTTONDOWN, 1, 1);
+    CHECK(player.LoadMacroToPlay(tempPath(L"does_not_exist")) == FlowEngine::PlayLoad::Invalid);
+    CHECK(player.GetEventCount() == 1);
+}
+
+TEST_CASE("--play loads a macro with events") {
+    ScratchFile file(L"play");
+    FlowEngine recorder;
+    recordSample(recorder);
+    REQUIRE(recorder.SaveMacro(file.path));
+
+    FlowEngine player;
+    pushMouse(player, WM_LBUTTONDOWN, 1, 1);
+    CHECK(player.LoadMacroToPlay(file.path) == FlowEngine::PlayLoad::Loaded);
+    CHECK(player.GetEventCount() == 7);
+}
+
 TEST_CASE("LoadMacro rejects a file that is not a macro") {
     FlowEngine engine;
 

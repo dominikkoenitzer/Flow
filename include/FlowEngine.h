@@ -144,6 +144,18 @@ struct TrimTiming {
 std::vector<InputEvent> TrimAndRetime(const std::vector<InputEvent>& events,
                                       const TrimTiming& trim);
 
+/**
+ * @brief The span and pause limit the Trim & Timing fields ask for
+ * @param startMs, endMs, maxGapMs The text of the three fields, in milliseconds
+ * @param trim Set to what the fields ask for when they all read
+ * @return false, leaving `trim` alone, when a field holds anything but up to
+ *         nine digits with spaces around them. An empty start or pause field
+ *         reads as 0, an empty end as the whole recording. The end keeps every
+ *         event within the millisecond it names.
+ */
+bool ReadTrimTiming(const wchar_t* startMs, const wchar_t* endMs, const wchar_t* maxGapMs,
+                    TrimTiming& trim);
+
 // ---- HighResTimer ----
 
 /**
@@ -697,6 +709,18 @@ public:
      * @return true if loaded successfully, false otherwise
      */
     bool LoadMacro(const std::wstring& filename);
+
+    /** @brief What LoadMacroToPlay made of a file */
+    enum class PlayLoad { Loaded, Empty, Invalid };
+
+    /**
+     * @brief LoadMacro for a run started from outside FLOW, by --play
+     * @param filename Input file path
+     * @return Loaded when the file's events replaced the macro. Empty for a
+     *         macro without events, Invalid for a file LoadMacro refuses; both
+     *         leave the loaded macro as it was.
+     */
+    PlayLoad LoadMacroToPlay(const std::wstring& filename);
 
     // ===== Internal Event Handlers =====
     

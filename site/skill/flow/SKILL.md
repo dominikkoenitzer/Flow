@@ -59,6 +59,7 @@ The `.rec` format is binary. Read [references/rec-format.md](references/rec-form
 Settings, then Trim & Timing, edits the recording in memory. It is greyed out while recording or playing, and when the recording is empty.
 - Start at and End at (ms): keep only the events in that span, counted from the start of the recording. Leave a field empty to keep everything on that side. The end is inclusive.
 - Shorten pauses over (ms): every wait longer than this becomes this long, the wait before the first event too. Leave it empty to keep the timing.
+- The fields take whole milliseconds. A pasted value that is not one, such as 1.5, is refused with a beep and the field keeps its number.
 - The line under the fields says how many events and seconds the result keeps. Apply replaces the recording in memory; Cancel leaves it as it was. Save afterwards to keep the result in a file.
 - A cut start moves the cursor to where it was and presses again any key or button held at that moment. Keys and buttons the cut end leaves held are released at the end, so a trimmed recording never leaves a key stuck down.
 
@@ -68,7 +69,7 @@ Settings, then Trim & Timing, edits the recording in memory. It is greyed out wh
 - If Flow is already open, the open window plays the file instead and stays open. It refuses while it is recording, playing, or showing a dialog, and says so.
 - Settings, then Create Play Shortcut, saves such a shortcut (`.lnk`) for the last opened or saved macro, on the desktop by default. It is greyed out until a macro has been opened or saved.
 - Flow runs as administrator, so every launch from a shortcut shows the UAC prompt. A program that is not elevated cannot hand a file to an open Flow window; Windows blocks it.
-- A launch with `--play` and no file shows a usage message. A file Flow cannot read shows the invalid-macro message, and Flow does not start.
+- A launch with `--play` and no file shows a usage message. A file Flow cannot read shows the invalid-macro message, and a macro without events shows "That macro has no events to play." Either way nothing plays, Flow does not start, and an open Flow keeps the recording it has.
 
 ## Auto-clicker
 
