@@ -181,6 +181,13 @@ public:
      */
     LONGLONG GetElapsedMicroseconds();
 
+    /**
+     * @brief Elapsed time from the timer's start to a given counter reading
+     * @param nowTicks A QueryPerformanceCounter reading
+     * @return Elapsed microseconds
+     */
+    LONGLONG ElapsedMicrosecondsAt(LONGLONG nowTicks) const;
+
     /** @brief Reset the timer to current time */
     void Reset();
 

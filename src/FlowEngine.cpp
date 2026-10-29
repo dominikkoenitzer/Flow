@@ -27,7 +27,11 @@ HighResTimer::HighResTimer() {
 LONGLONG HighResTimer::GetElapsedMicroseconds() {
     LARGE_INTEGER currentTime;
     QueryPerformanceCounter(&currentTime);
-    return ((currentTime.QuadPart - startTime.QuadPart) * 1000000) / frequency.QuadPart;
+    return ElapsedMicrosecondsAt(currentTime.QuadPart);
+}
+
+LONGLONG HighResTimer::ElapsedMicrosecondsAt(LONGLONG nowTicks) const {
+    return ((nowTicks - startTime.QuadPart) * 1000000) / frequency.QuadPart;
 }
 
 void HighResTimer::Reset() {
