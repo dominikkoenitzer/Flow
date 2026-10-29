@@ -197,7 +197,8 @@ public:
     /**
      * @brief Wait a whole-millisecond duration with low jitter and low CPU.
      * @param milliseconds Duration to wait
-     * @note Releases the CPU with Sleep() for all but the final ~2ms, then
+     * @note Releases the CPU on a high-resolution waitable timer (Sleep()
+     *       before Windows 10 1803) for all but the final ~2ms, then
      *       busy-waits the remainder on the performance counter. Unlike a full
      *       busy-wait this does not peg a CPU core for long intervals, while
      *       still keeping sub-millisecond accuracy for clicker/playback timing.
