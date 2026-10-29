@@ -383,6 +383,25 @@ TEST_CASE("ClearRecording empties the buffer") {
     CHECK(engine.GetDurationMs() == 0);
 }
 
+TEST_CASE("ClearRecording during a recording keeps the events and their start") {
+    FlowEngine engine;
+    flow::TestAccess::setBusy(engine, true, false);
+    pushMouse(engine, WM_LBUTTONDOWN, 1, 1);
+    Sleep(200);
+    engine.ClearRecording();
+    pushMouse(engine, WM_LBUTTONUP, 1, 1);
+
+    // A clear here made the next event the first one, stamped 200 ms after the start.
+    const auto events = engine.GetEvents();
+    REQUIRE_FALSE(events.empty());
+    CHECK(events.front().timestampUs < 200000);
+    CHECK(events.size() == 2);
+
+    flow::TestAccess::setBusy(engine, false, false);
+    engine.ClearRecording();
+    CHECK(engine.GetEventCount() == 0);
+}
+
 TEST_CASE("A macro survives a save and load round trip byte for byte") {
     ScratchFile first(L"roundtrip_a");
     ScratchFile second(L"roundtrip_b");

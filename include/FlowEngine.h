@@ -598,7 +598,7 @@ public:
     bool IsRecordingActive() const { return isRecording.load(); }
     
     /**
-     * @brief Clear all recorded events
+     * @brief Clear all recorded events; does nothing while recording
      */
     void ClearRecording();
 
