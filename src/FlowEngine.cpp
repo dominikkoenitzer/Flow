@@ -475,6 +475,8 @@ void FlowEngine::StopRecording() {
 }
 
 void FlowEngine::ClearRecording() {
+    // The next event would be stamped from the old start; StartRecording clears before it sets the flag.
+    if (isRecording.load()) return;
     std::lock_guard<std::mutex> lock(recordMutex);
     recordedEvents.clear();
 }
