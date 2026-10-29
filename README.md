@@ -141,7 +141,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, coding convent
 | `include/ui/NumberFields.h` | The number fields, and taking the focused one's value before a hotkey acts. |
 | `src/ui/Draw.cpp` / `include/ui/Draw.h` | Anti-aliased GDI+ primitives and the vector glyphs. |
 | `src/ui/Buttons.cpp` / `include/ui/Buttons.h` | The owner-draw buttons, toggles and key fields. |
-| `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
+| `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization, Trim & Timing and About dialogs. |
 | `src/FlowEngine.cpp` / `include/FlowEngine.h` | UI-agnostic engine (`flow` namespace): recording, playback, auto-clicker, timing, humanization. |
 | `resource.rc` / `FLOW.manifest` | App icon and manifest (admin elevation, visual styles, DPI awareness), embedded via `windres`. |
 | `tests/` | doctest suite over the engine: humanization, the .rec format, timing, the clicker, window placement. |
