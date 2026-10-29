@@ -311,22 +311,13 @@ LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM 
 LRESULT CALLBACK HotkeyEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     (void)uIdSubclass;
     (void)dwRefData;
-    if (msg == WM_KEYDOWN) {
-        UINT vk = (UINT)wParam;
-        
-        // Allow F1-F12, A-Z, 0-9
-        bool validKey = (vk >= VK_F1 && vk <= VK_F12) || 
-                        (vk >= 'A' && vk <= 'Z') || 
-                        (vk >= '0' && vk <= '9');
-        
-        if (validKey) {
-            if (hwnd == g_hHotkeyRecordEdit)        g_tempHotkeyRecord = vk;
-            else if (hwnd == g_hHotkeyPlaybackEdit) g_tempHotkeyPlayback = vk;
-            else if (hwnd == g_hHotkeyClickerEdit)  g_tempHotkeyClicker = vk;
-            else if (hwnd == g_hHotkeyStopEdit)     g_tempHotkeyStop = vk;
-            InvalidateRect(hwnd, NULL, FALSE);   // owner-draw repaints the key text
-            return 0;
-        }
+    if (UINT vk = HotkeyFieldKey(msg, wParam, lParam)) {
+        if (hwnd == g_hHotkeyRecordEdit)        g_tempHotkeyRecord = vk;
+        else if (hwnd == g_hHotkeyPlaybackEdit) g_tempHotkeyPlayback = vk;
+        else if (hwnd == g_hHotkeyClickerEdit)  g_tempHotkeyClicker = vk;
+        else if (hwnd == g_hHotkeyStopEdit)     g_tempHotkeyStop = vk;
+        InvalidateRect(hwnd, NULL, FALSE);   // owner-draw repaints the key text
+        return 0;
     }
     // Repaint the focus ring as focus moves between fields.
     if (msg == WM_SETFOCUS || msg == WM_KILLFOCUS) {
