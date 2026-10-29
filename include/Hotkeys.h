@@ -12,6 +12,22 @@
 
 namespace flow::ui {
 
+/**
+ * The key a hotkey field takes from a keyboard message, or 0 when the message
+ * does not set one. Only F1 to F12, A to Z and 0 to 9 are taken. F10 arrives
+ * as WM_SYSKEYDOWN without Alt; a key pressed with Alt stays with the dialog.
+ */
+inline UINT HotkeyFieldKey(UINT msg, WPARAM wParam, LPARAM lParam) {
+    const bool press = msg == WM_KEYDOWN ||
+                       (msg == WM_SYSKEYDOWN && !(HIWORD(lParam) & KF_ALTDOWN));
+    if (!press) return 0;
+    const UINT vk = (UINT)wParam;
+    const bool valid = (vk >= VK_F1 && vk <= VK_F12) ||
+                       (vk >= 'A' && vk <= 'Z') ||
+                       (vk >= '0' && vk <= '9');
+    return valid ? vk : 0;
+}
+
 void RegisterHotkeys();
 void UnregisterHotkeys();
 
