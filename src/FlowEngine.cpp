@@ -94,7 +94,10 @@ double ScaleGapUs(ULONGLONG gapUs, double speed) {
 }
 
 double ParseSpeedText(const wchar_t* text) {
-    double v = wcstod(text, nullptr);
+    // wcstod reads only a decimal point, so "0,5" typed on a comma keyboard would read 0.
+    std::wstring s(text);
+    std::replace(s.begin(), s.end(), L',', L'.');
+    double v = wcstod(s.c_str(), nullptr);
     // Written as a negation so NaN, which fails every comparison, takes the floor.
     if (!(v >= 0.1)) v = 0.1;
     if (v > 100.0) v = 100.0;
