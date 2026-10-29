@@ -18,6 +18,7 @@
 #include "ui/Dialogs.h"
 #include "ui/Dpi.h"
 #include "ui/Draw.h"
+#include "ui/NumberFields.h"
 #include "ui/Placement.h"
 #include "ui/Theme.h"
 
@@ -375,6 +376,24 @@ static void ApplyClickLimitEdit(HWND hwnd) {
     PushClickerOptions();
 }
 
+// Take the value typed into one of the number fields; false for any other ID.
+static bool ApplyEdit(HWND hwnd, int id) {
+    if (id == EDIT_SPEED) ApplySpeedEdit(hwnd);
+    else if (id == EDIT_LOOPS) ApplyLoopsEdit(hwnd);
+    else if (id == EDIT_INTERVAL) ApplyIntervalEdit(hwnd);
+    else if (id == EDIT_JITTER) ApplyJitterEdit(hwnd);
+    else if (id == EDIT_CLICK_LIMIT) ApplyClickLimitEdit(hwnd);
+    else return false;
+    SaveSettings();
+    return true;
+}
+
+// The ID of the main window control that has the focus, or 0.
+static int FocusedControl(HWND hwnd) {
+    HWND f = GetFocus();
+    return f && IsChild(hwnd, f) ? GetDlgCtrlID(f) : 0;
+}
+
 // What the clicker's choice fields show.
 static const wchar_t* ClickButtonText() {
     static const wchar_t* names[] = { L"Left", L"Right", L"Middle" };
@@ -683,12 +702,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int code = HIWORD(wParam);
 
             if (code == EN_KILLFOCUS) {
-                if (id == EDIT_SPEED) ApplySpeedEdit(hwnd);
-                else if (id == EDIT_LOOPS) ApplyLoopsEdit(hwnd);
-                else if (id == EDIT_INTERVAL) ApplyIntervalEdit(hwnd);
-                else if (id == EDIT_JITTER) ApplyJitterEdit(hwnd);
-                else if (id == EDIT_CLICK_LIMIT) ApplyClickLimitEdit(hwnd);
-                SaveSettings();
+                ApplyEdit(hwnd, id);
                 InvalidateRect(hwnd, NULL, FALSE);   // clear focus ring
                 break;
             }
@@ -822,10 +836,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
 
         case WM_HOTKEY:
-            if (wParam == HOTKEY_RECORD) ToggleRecording(hwnd);
-            else if (wParam == HOTKEY_PLAYBACK) TogglePlayback(hwnd);
-            else if (wParam == HOTKEY_CLICKER) ToggleAutoClicker();
-            else if (wParam == HOTKEY_STOP) StopAll(hwnd);
+            RunHotkey(FocusedControl(hwnd), [hwnd](int id) { ApplyEdit(hwnd, id); }, [hwnd, wParam] {
+                if (wParam == HOTKEY_RECORD) ToggleRecording(hwnd);
+                else if (wParam == HOTKEY_PLAYBACK) TogglePlayback(hwnd);
+                else if (wParam == HOTKEY_CLICKER) ToggleAutoClicker();
+                else if (wParam == HOTKEY_STOP) StopAll(hwnd);
+            });
             break;
 
         case WM_DROPFILES: {
