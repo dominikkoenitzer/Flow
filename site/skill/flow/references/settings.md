@@ -1,6 +1,6 @@
 # settings.cfg
 
-Path: `%APPDATA%\FLOW\settings.cfg`. One `key=value` per line. Flow reads it at start and writes it right after each change in the window and on close, but only when the settings differ from what the file last held; close Flow before editing. Each write goes to `settings.cfg.tmp` first, which then replaces the file. Unknown keys and lines without `=` are ignored. A value outside its range is ignored and the default stays.
+Path: `%APPDATA%\FLOW\settings.cfg`. One `key=value` per line. Flow reads it at start and writes it right after each change in the window and on close, but only when the settings differ from what the file last held; close Flow before editing. Each write goes to a temporary file beside it first, which then replaces the file. Unknown keys and lines without `=` are ignored. A value outside its range is ignored and the default stays.
 
 | Key | Values | Default | Meaning |
 |---|---|---|---|

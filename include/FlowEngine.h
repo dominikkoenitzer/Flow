@@ -27,6 +27,7 @@
 #include <chrono>
 #include <functional>
 #include <cstdint>
+#include <ostream>
 #include <string>
 
 namespace flow {
@@ -382,6 +383,21 @@ DWORD JitteredIntervalMs(DWORD intervalMs, DWORD jitterMs, std::mt19937& rng);
  * @param limit The options' limit; 0 means no limit
  */
 inline bool ClickLimitReached(DWORD done, DWORD limit) { return limit != 0 && done >= limit; }
+
+// ---- Files ----
+
+/** @brief Fills an open file; the stream's state afterwards tells whether it worked */
+using FileWriter = std::function<void(std::ostream&)>;
+
+/**
+ * @brief Write a whole file
+ * @param path Where the file goes, as a wide path
+ * @param write Fills the file
+ * @param mode std::ios::binary, or std::ios::out for text with CRLF line ends
+ * @return true if all of it reached the file
+ */
+bool WriteFileWhole(const std::wstring& path, const FileWriter& write,
+                    std::ios::openmode mode = std::ios::binary);
 
 // ---- AutoClicker ----
 
