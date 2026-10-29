@@ -179,10 +179,23 @@ public:
     HighResTimer();
 
     /**
+     * @brief Start the clock at a given counter reading instead of now
+     * @param startTicks A QueryPerformanceCounter reading
+     */
+    explicit HighResTimer(LONGLONG startTicks);
+
+    /**
      * @brief Get elapsed time since timer creation or last reset
      * @return Elapsed microseconds
      */
     LONGLONG GetElapsedMicroseconds();
+
+    /**
+     * @brief Elapsed time from the timer's start to a given counter reading
+     * @param nowTicks A QueryPerformanceCounter reading
+     * @return Elapsed microseconds
+     */
+    LONGLONG ElapsedMicrosecondsAt(LONGLONG nowTicks) const;
 
     /** @brief Reset the timer to current time */
     void Reset();
