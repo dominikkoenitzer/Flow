@@ -12,17 +12,32 @@
 
 namespace flow::ui {
 
-void RegisterHotkeys() {
-    RegisterHotKey(g_app.hwnd, HOTKEY_RECORD, 0, g_app.hotkeyRecord);
-    RegisterHotKey(g_app.hwnd, HOTKEY_PLAYBACK, g_app.hotkeyModifiers, g_app.hotkeyPlayback);
-    RegisterHotKey(g_app.hwnd, HOTKEY_CLICKER, 0, g_app.hotkeyClicker);
-    RegisterHotKey(g_app.hwnd, HOTKEY_STOP, 0, g_app.hotkeyStop);
+bool RegisterHotkeys(std::string* taken) {
+    const std::array<HotkeyBinding, 4> bindings = {{
+        { HOTKEY_RECORD, 0, g_app.hotkeyRecord },
+        { HOTKEY_PLAYBACK, g_app.hotkeyModifiers, g_app.hotkeyPlayback },
+        { HOTKEY_CLICKER, 0, g_app.hotkeyClicker },
+        { HOTKEY_STOP, 0, g_app.hotkeyStop },
+    }};
+    const int refused = RegisterBindings(bindings, [](const HotkeyBinding& b) {
+        return RegisterHotKey(g_app.hwnd, b.id, b.modifiers, b.vk) != FALSE;
+    });
+    if (refused >= 0 && taken) {
+        const HotkeyBinding& b = bindings[refused];
+        *taken = GetKeyName(b.vk, b.id == HOTKEY_PLAYBACK);
+    }
 
     // Keep the recorder's filter in step with the keys just registered.
     if (g_app.engine) {
         g_app.engine->SetControlKeys(g_app.hotkeyRecord, g_app.hotkeyPlayback,
                                      g_app.hotkeyClicker, g_app.hotkeyStop);
     }
+    return refused < 0;
+}
+
+void ShowHotkeyTaken(HWND owner, const std::string& key) {
+    const std::string text = "Another program already uses " + key + ", so FLOW cannot use it as a hotkey.";
+    MessageBoxA(owner, text.c_str(), "Error", MB_OK | MB_ICONERROR);
 }
 
 void UnregisterHotkeys() {

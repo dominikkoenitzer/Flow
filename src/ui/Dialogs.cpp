@@ -274,13 +274,25 @@ LRESULT CALLBACK HotkeyDialogWndProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM 
                     UnregisterHotkeys();
 
                     // Apply new hotkeys
+                    const UINT old[] = {g_app.hotkeyRecord, g_app.hotkeyPlayback,
+                                        g_app.hotkeyClicker, g_app.hotkeyStop};
                     g_app.hotkeyRecord = g_tempHotkeyRecord;
                     g_app.hotkeyPlayback = g_tempHotkeyPlayback;
                     g_app.hotkeyClicker = g_tempHotkeyClicker;
                     g_app.hotkeyStop = g_tempHotkeyStop;
 
-                    // Register new hotkeys
-                    RegisterHotkeys();
+                    // A key another program holds saves nothing: the old keys come back and the dialog stays open.
+                    std::string taken;
+                    if (!RegisterHotkeys(&taken)) {
+                        UnregisterHotkeys();
+                        g_app.hotkeyRecord = old[0];
+                        g_app.hotkeyPlayback = old[1];
+                        g_app.hotkeyClicker = old[2];
+                        g_app.hotkeyStop = old[3];
+                        RegisterHotkeys();
+                        ShowHotkeyTaken(hDlg, taken);
+                        break;
+                    }
 
                     DestroyWindow(hDlg);
                     break;

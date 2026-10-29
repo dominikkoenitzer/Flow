@@ -10,7 +10,17 @@
 
 #include <windows.h>
 
+#include <array>
+#include <string>
+
 namespace flow::ui {
+
+/** One global hotkey: its WM_HOTKEY id, the modifiers it needs and its key. */
+struct HotkeyBinding {
+    int id;
+    UINT modifiers;
+    UINT vk;
+};
 
 /**
  * The key a hotkey field takes from a keyboard message, or 0 when the message
@@ -28,8 +38,29 @@ inline UINT HotkeyFieldKey(UINT msg, WPARAM wParam, LPARAM lParam) {
     return valid ? vk : 0;
 }
 
-void RegisterHotkeys();
+/**
+ * Register every binding through `reg`, which the app points at RegisterHotKey,
+ * and return the index of the first one refused, or -1 when none was.
+ * A refused key does not stop the rest from being registered.
+ */
+template <typename Register>
+int RegisterBindings(const std::array<HotkeyBinding, 4>& bindings, Register reg) {
+    int refused = -1;
+    for (int i = 0; i < (int)bindings.size(); ++i) {
+        if (!reg(bindings[i]) && refused < 0) refused = i;
+    }
+    return refused;
+}
+
+/**
+ * Register the four hotkeys. Returns false when Windows refused one, which it
+ * does when another program already holds that key; `taken` then names it.
+ */
+bool RegisterHotkeys(std::string* taken = nullptr);
 void UnregisterHotkeys();
+
+/** Tell the user that another program holds `key`, so FLOW could not take it. */
+void ShowHotkeyTaken(HWND owner, const std::string& key);
 
 /**
  * A printable name for a virtual-key code: "F8", "Ctrl+F9", "Key 190".
