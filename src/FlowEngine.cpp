@@ -985,9 +985,7 @@ bool FlowEngine::SaveMacro(const std::wstring& filename) {
 }
 
 bool WriteFileWhole(const std::wstring& path, const FileWriter& write, std::ios::openmode mode) {
-    // Write a new file beside the old one and swap it in once all of it is on
-    // the disk, so a write that fails part way leaves the old file as it was.
-    // CREATE_NEW takes a name no other file has, so nothing else is overwritten.
+    // A new file under a name no other file has, swapped in once all of it is on disk.
     std::wstring temp;
     for (int i = 0; temp.empty(); ++i) {
         if (i == 100) return false;
@@ -1013,8 +1011,7 @@ bool WriteFileWhole(const std::wstring& path, const FileWriter& write, std::ios:
         ok = !file.fail();  // a full disk fails the write or the flush on close
     }
 
-    // NTFS journals the rename but not the data, so without this a power cut
-    // right after the swap could leave an empty file in place of both.
+    // NTFS journals the rename but not the data, so flush before the swap.
     if (ok) {
         HANDLE written = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
                                      FILE_ATTRIBUTE_NORMAL, nullptr);
