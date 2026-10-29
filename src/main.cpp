@@ -104,7 +104,7 @@ void ShowSettingsMenu(HWND hwnd) {
     const bool hasEvents = g_app.engine && g_app.engine->GetEventCount() > 0;
     AppendMenuW(hMenu, MF_STRING | (idle && hasEvents ? 0 : MF_GRAYED),
                 MENU_TRIM_TIMING, L"Trim && Timing…");
-    AppendMenuW(hMenu, MF_STRING, MENU_CLEAR_RECORDING, L"Clear Recording");
+    AppendMenuW(hMenu, MF_STRING | (idle ? 0 : MF_GRAYED), MENU_CLEAR_RECORDING, L"Clear Recording");
     const bool hasFile = !g_app.lastMacroPath.empty()
         && GetFileAttributesW(g_app.lastMacroPath.c_str()) != INVALID_FILE_ATTRIBUTES;
     AppendMenuW(hMenu, MF_STRING | (hasFile ? 0 : MF_GRAYED),
