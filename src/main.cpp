@@ -176,11 +176,19 @@ void SaveMacroFile(HWND hwnd) {
 
 // ---- actions ----
 
+// Recording and playback can run at once, and either may end first, so the
+// title is worked out from both each time. A recording owns it while it runs.
+static void ShowStateInTitle(HWND hwnd) {
+    SetWindowTextA(hwnd, g_app.isRecording ? "FLOW - Recording..."
+                       : g_app.isPlaying   ? "FLOW - Playing..."
+                       : "FLOW");
+}
+
 void ToggleRecording(HWND hwnd) {
     if (g_app.isRecording) {
         g_app.engine->StopRecording();
         g_app.isRecording = false;
-        SetWindowTextA(hwnd, "FLOW");
+        ShowStateInTitle(hwnd);
     } else {
         g_app.engine->StartRecording();
         // StartRecording installs the global hooks on demand; if that fails it
@@ -188,7 +196,7 @@ void ToggleRecording(HWND hwnd) {
         // claiming "Recording", so the UI can't lie about what's happening.
         g_app.isRecording = g_app.engine->IsRecordingActive();
         if (g_app.isRecording) {
-            SetWindowTextA(hwnd, "FLOW - Recording...");
+            ShowStateInTitle(hwnd);
         } else {
             MessageBoxW(hwnd,
                 L"Couldn't start recording. The input hooks failed to install.\n\n"
@@ -204,7 +212,6 @@ void TogglePlayback(HWND hwnd) {
     if (g_app.isPlaying) {
         g_app.engine->StopPlayback();
         g_app.isPlaying = false;
-        SetWindowTextA(hwnd, "FLOW");
     } else {
         g_app.engine->SetPlaybackSpeed(g_app.playbackSpeed);
         if (g_app.continuous) {
@@ -212,9 +219,11 @@ void TogglePlayback(HWND hwnd) {
         } else {
             g_app.engine->StartPlayback(g_app.loopCount);
         }
-        g_app.isPlaying = true;
-        SetWindowTextA(hwnd, "FLOW - Playing...");
+        // With no events the engine starts nothing. A run asked for is still
+        // marked even if it already ended, so the status timer sees it end.
+        g_app.isPlaying = g_app.engine->GetEventCount() > 0;
     }
+    ShowStateInTitle(hwnd);
     UpdateStatusDisplay();
     InvalidateRect(hwnd, NULL, TRUE);
 }
@@ -277,7 +286,7 @@ void StopAll(HWND hwnd) {
         Sleep(50);
     }
     
-    SetWindowTextA(hwnd, "FLOW");
+    ShowStateInTitle(hwnd);
     UpdateStatusDisplay();
     InvalidateRect(hwnd, NULL, TRUE);
 }
@@ -803,8 +812,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wParam == TIMER_STATUS_CHECK) {
                 if (g_app.isPlaying && g_app.engine && !g_app.engine->IsPlaybackActive()) {
                     g_app.isPlaying = false;
-                    // A recording started during playback owns the title now.
-                    if (!g_app.isRecording) SetWindowTextA(hwnd, "FLOW");
+                    ShowStateInTitle(hwnd);
                     UpdateStatusDisplay();
                 }
                 // A FLOW started by --play closes when its run ends, however
