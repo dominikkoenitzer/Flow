@@ -14,7 +14,7 @@
 namespace flow::ui {
 
 /** %APPDATA%\FLOW\settings.cfg, creating the directory if it is missing. */
-std::string GetSettingsPath();
+std::wstring GetSettingsPath();
 
 /**
  * Write the settings in g_app, but only if they differ from what the file held
