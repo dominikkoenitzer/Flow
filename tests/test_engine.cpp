@@ -123,6 +123,15 @@ TEST_CASE("A zero delay returns promptly") {
     CHECK(timer.GetElapsedMicroseconds() < 50000);
 }
 
+TEST_CASE("A run of short PreciseDelayMs waits ends close to the requested total") {
+    // Twenty 5 ms waits: over 300 ms if each one lasts a 15.6 ms system tick, and 5 ms of slack per wait for a busy runner.
+    HighResTimer timer;
+    for (int i = 0; i < 20; ++i) HighResTimer::PreciseDelayMs(5);
+    const LONGLONG elapsedUs = timer.GetElapsedMicroseconds();
+    CHECK(elapsedUs >= 100000);
+    CHECK(elapsedUs < 200000);
+}
+
 TEST_CASE("Performance counter ticks convert to whole microseconds") {
     const LONGLONG freq = 10000000;  // 10 MHz, the usual QPC rate on Windows 10 and later
 
@@ -247,6 +256,18 @@ TEST_CASE("WaitUntilMicroseconds stops waiting when cancelled") {
     HighResTimer timer;
     timer.WaitUntilMicroseconds(10 * 1000 * 1000, &cancel);  // ten seconds
     CHECK(timer.GetElapsedMicroseconds() < 1000000);
+}
+
+TEST_CASE("A run of short WaitUntilMicroseconds waits ends close to the requested total") {
+    // Twenty 5 ms playback gaps, each on its own clock, with the same bound as the PreciseDelayMs run.
+    HighResTimer total;
+    for (int i = 0; i < 20; ++i) {
+        HighResTimer gap;
+        gap.WaitUntilMicroseconds(5000);
+    }
+    const LONGLONG elapsedUs = total.GetElapsedMicroseconds();
+    CHECK(elapsedUs >= 100000);
+    CHECK(elapsedUs < 200000);
 }
 
 TEST_CASE("Playback jitters a wait by the humanization, in milliseconds") {
