@@ -8,16 +8,18 @@
 
 #include <windows.h>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
 namespace flow::ui {
 
-std::string GetSettingsPath() {
-    const char* appdata = getenv("APPDATA");
-    std::string dir = appdata ? (std::string(appdata) + "\\FLOW") : std::string(".");
-    CreateDirectoryA(dir.c_str(), NULL);
-    return dir + "\\settings.cfg";
+// Wide, as the narrow environment turns a name outside the ANSI code page into '?'.
+std::wstring GetSettingsPath() {
+    const wchar_t* appdata = _wgetenv(L"APPDATA");
+    std::wstring dir = appdata ? (std::wstring(appdata) + L"\\FLOW") : std::wstring(L".");
+    CreateDirectoryW(dir.c_str(), NULL);
+    return dir + L"\\settings.cfg";
 }
 
 // UTF-8 <-> wide helpers so the (narrow) settings file can round-trip Unicode
@@ -78,22 +80,13 @@ static std::string SettingsText() {
 void SaveSettings() {
     std::string text = SettingsText();
     if (text == g_savedText) return;
-    // Write a temporary file next to the real one and swap it in, so a crash
-    // or a full disk part way through never leaves a half-written file.
-    std::string path = GetSettingsPath();
-    std::string tmp = path + ".tmp";
-    std::ofstream f(tmp);
-    if (!f.is_open()) return;
-    f << text;
-    f.close();
-    if (!f.fail() && MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
+    // Text mode, as before.
+    if (WriteFileWhole(GetSettingsPath(), [&](std::ostream& f) { f << text; }, std::ios::out))
         g_savedText = text;
-    else
-        DeleteFileA(tmp.c_str());
 }
 
 void LoadSettings() {
-    std::ifstream f(GetSettingsPath());
+    std::ifstream f{std::filesystem::path(GetSettingsPath())};
     if (!f.is_open()) return;
 
     std::string line;
