@@ -209,6 +209,13 @@ TEST_CASE("The speed field reads nan and infinity as numbers in range") {
     CHECK(flow::ParseSpeedText(L"-inf") == 0.1);
 }
 
+TEST_CASE("The speed field reads a decimal comma as a decimal point") {
+    CHECK(flow::ParseSpeedText(L"0,5") == 0.5);
+    CHECK(flow::ParseSpeedText(L"1,5") == 1.5);
+    CHECK(flow::ParseSpeedText(L"0,05") == 0.1);
+    CHECK(flow::ParseSpeedText(L"250,5") == 100.0);
+}
+
 TEST_CASE("NextVariance is the bias alone when the spread is zero") {
     flow::HumanizationEngine humanizer(4.0, 0.0);
     CHECK(humanizer.NextVariance() == doctest::Approx(4.0));
