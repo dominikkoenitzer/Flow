@@ -31,7 +31,7 @@ LONGLONG HighResTimer::GetElapsedMicroseconds() {
 }
 
 LONGLONG HighResTimer::ElapsedMicrosecondsAt(LONGLONG nowTicks) const {
-    return ((nowTicks - startTime.QuadPart) * 1000000) / frequency.QuadPart;
+    return static_cast<LONGLONG>(TicksToUs(startTime.QuadPart, nowTicks, frequency.QuadPart));
 }
 
 void HighResTimer::Reset() {
