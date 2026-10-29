@@ -24,6 +24,11 @@ HighResTimer::HighResTimer() {
     QueryPerformanceCounter(&startTime);
 }
 
+HighResTimer::HighResTimer(LONGLONG startTicks) {
+    QueryPerformanceFrequency(&frequency);
+    startTime.QuadPart = startTicks;
+}
+
 LONGLONG HighResTimer::GetElapsedMicroseconds() {
     LARGE_INTEGER currentTime;
     QueryPerformanceCounter(&currentTime);
