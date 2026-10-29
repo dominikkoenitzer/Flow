@@ -388,6 +388,14 @@ static bool ApplyEdit(HWND hwnd, int id) {
     return true;
 }
 
+// Take the focused field's value and leave its caret where it was; the write-back moves it to the start.
+static void ApplyFocusedEdit(HWND hwnd, int id) {
+    DWORD start = 0, end = 0;
+    SendDlgItemMessageW(hwnd, id, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
+    ApplyEdit(hwnd, id);
+    SendDlgItemMessageW(hwnd, id, EM_SETSEL, start, end);
+}
+
 // The ID of the main window control that has the focus, or 0.
 static int FocusedControl(HWND hwnd) {
     HWND f = GetFocus();
@@ -836,7 +844,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
 
         case WM_HOTKEY:
-            RunHotkey(FocusedControl(hwnd), [hwnd](int id) { ApplyEdit(hwnd, id); }, [hwnd, wParam] {
+            RunHotkey(FocusedControl(hwnd), [hwnd](int id) { ApplyFocusedEdit(hwnd, id); }, [hwnd, wParam] {
                 if (wParam == HOTKEY_RECORD) ToggleRecording(hwnd);
                 else if (wParam == HOTKEY_PLAYBACK) TogglePlayback(hwnd);
                 else if (wParam == HOTKEY_CLICKER) ToggleAutoClicker();
