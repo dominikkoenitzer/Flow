@@ -10,6 +10,8 @@
 
 #include "FlowEngine.h"
 
+#include <climits>
+
 using flow::FlowEngine;
 using flow::HighResTimer;
 
@@ -140,6 +142,32 @@ TEST_CASE("Performance counter ticks convert to whole microseconds") {
     const LONGLONG yearTicks = 365LL * 24 * 3600 * freq;
     CHECK(flow::TicksToUs(yearTicks, yearTicks + 42 * freq / 1000, freq) == 42000);
     CHECK(flow::TicksToUs(0, yearTicks, freq) == 365ULL * 24 * 3600 * 1000000);
+}
+
+TEST_CASE("The timer keeps counting past the point where ticks * 1000000 overflows") {
+    // At 10 MHz that point is about 10.7 days on one timer, and playback runs a whole loop on one.
+    LARGE_INTEGER freq, now;
+    QueryPerformanceFrequency(&freq);
+    HighResTimer timer;
+    QueryPerformanceCounter(&now);
+
+    const LONGLONG seconds = LLONG_MAX / 1000000 / freq.QuadPart + 1;
+    const LONGLONG elapsed = timer.ElapsedMicrosecondsAt(now.QuadPart + seconds * freq.QuadPart);
+    CHECK(elapsed >= seconds * 1000000);
+    CHECK(elapsed < (seconds + 1) * 1000000);
+}
+
+TEST_CASE("A timer started that long ago reads the right elapsed time now") {
+    // GetElapsedMicroseconds is what playback waits on, so it is checked on its own.
+    LARGE_INTEGER freq, now;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&now);
+
+    const LONGLONG seconds = LLONG_MAX / 1000000 / freq.QuadPart + 1;
+    HighResTimer timer(now.QuadPart - seconds * freq.QuadPart);
+    const LONGLONG elapsed = timer.GetElapsedMicroseconds();
+    CHECK(elapsed >= seconds * 1000000);
+    CHECK(elapsed < (seconds + 1) * 1000000);
 }
 
 TEST_CASE("A tick conversion that cannot be trusted returns zero") {

@@ -24,10 +24,19 @@ HighResTimer::HighResTimer() {
     QueryPerformanceCounter(&startTime);
 }
 
+HighResTimer::HighResTimer(LONGLONG startTicks) {
+    QueryPerformanceFrequency(&frequency);
+    startTime.QuadPart = startTicks;
+}
+
 LONGLONG HighResTimer::GetElapsedMicroseconds() {
     LARGE_INTEGER currentTime;
     QueryPerformanceCounter(&currentTime);
-    return ((currentTime.QuadPart - startTime.QuadPart) * 1000000) / frequency.QuadPart;
+    return ElapsedMicrosecondsAt(currentTime.QuadPart);
+}
+
+LONGLONG HighResTimer::ElapsedMicrosecondsAt(LONGLONG nowTicks) const {
+    return static_cast<LONGLONG>(TicksToUs(startTime.QuadPart, nowTicks, frequency.QuadPart));
 }
 
 void HighResTimer::Reset() {
