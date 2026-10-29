@@ -310,6 +310,13 @@ LRESULT CALLBACK InputEditProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id, 
     return DefSubclassProc(h, m, w, l);
 }
 
+// Show `text` in a number field; one that already shows it keeps its caret, selection and undo.
+static void ShowEditText(HWND hwnd, int id, const wchar_t* text) {
+    wchar_t now[32];
+    GetDlgItemTextW(hwnd, id, now, 32);
+    if (wcscmp(now, text) != 0) SetDlgItemTextW(hwnd, id, text);
+}
+
 static void ApplySpeedEdit(HWND hwnd) {
     wchar_t buf[32];
     GetDlgItemTextW(hwnd, EDIT_SPEED, buf, 32);
@@ -317,7 +324,7 @@ static void ApplySpeedEdit(HWND hwnd) {
     SetPlaybackSpeed((float)v);
     wchar_t out[32];
     swprintf(out, 32, L"%g", v);
-    SetDlgItemTextW(hwnd, EDIT_SPEED, out);
+    ShowEditText(hwnd, EDIT_SPEED, out);
 }
 
 static void ApplyLoopsEdit(HWND hwnd) {
@@ -329,7 +336,7 @@ static void ApplyLoopsEdit(HWND hwnd) {
     g_app.loopCount = v;
     wchar_t out[16];
     swprintf(out, 16, L"%d", v);
-    SetDlgItemTextW(hwnd, EDIT_LOOPS, out);
+    ShowEditText(hwnd, EDIT_LOOPS, out);
     UpdateStatusDisplay();
 }
 
@@ -343,7 +350,7 @@ static void ApplyIntervalEdit(HWND hwnd) {
     if (g_app.engine && g_app.isClicking) g_app.engine->SetClickInterval(v);
     wchar_t out[16];
     swprintf(out, 16, L"%d", v);
-    SetDlgItemTextW(hwnd, EDIT_INTERVAL, out);
+    ShowEditText(hwnd, EDIT_INTERVAL, out);
     UpdateStatusDisplay();
 }
 
@@ -362,7 +369,7 @@ static int ApplyNumberEdit(HWND hwnd, int id, int lo, int hi) {
     if (v > hi) v = hi;
     wchar_t out[16];
     swprintf(out, 16, L"%ld", v);
-    SetDlgItemTextW(hwnd, id, out);
+    ShowEditText(hwnd, id, out);
     return (int)v;
 }
 
@@ -393,7 +400,9 @@ static void ApplyFocusedEdit(HWND hwnd, int id) {
     DWORD start = 0, end = 0;
     SendDlgItemMessageW(hwnd, id, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
     ApplyEdit(hwnd, id);
-    SendDlgItemMessageW(hwnd, id, EM_SETSEL, start, end);
+    DWORD nowStart = 0, nowEnd = 0;
+    SendDlgItemMessageW(hwnd, id, EM_GETSEL, (WPARAM)&nowStart, (LPARAM)&nowEnd);
+    if (nowStart != start || nowEnd != end) SendDlgItemMessageW(hwnd, id, EM_SETSEL, start, end);
 }
 
 // The ID of the main window control that has the focus, or 0.
