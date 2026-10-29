@@ -241,8 +241,9 @@ double ScaleGapUs(ULONGLONG gapUs, double speed);
 /**
  * @brief The playback speed typed into the Speed field
  * @param text The field's text
- * @return The number it starts with, clamped to 0.1 to 100; text that is not
- *         a number, "nan" included, gives 0.1 as an empty field does
+ * @return The number it starts with, clamped to 0.1 to 100; a decimal comma
+ *         reads as a decimal point, and text that is not a number, "nan"
+ *         included, gives 0.1 as an empty field does
  */
 double ParseSpeedText(const wchar_t* text);
 

@@ -18,6 +18,7 @@
 #include "ui/Dialogs.h"
 #include "ui/Dpi.h"
 #include "ui/Draw.h"
+#include "ui/NumberFields.h"
 #include "ui/Placement.h"
 #include "ui/Theme.h"
 
@@ -309,6 +310,13 @@ LRESULT CALLBACK InputEditProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id, 
     return DefSubclassProc(h, m, w, l);
 }
 
+// Show `text` in a number field; one that already shows it keeps its caret, selection and undo.
+static void ShowEditText(HWND hwnd, int id, const wchar_t* text) {
+    wchar_t now[32];
+    GetDlgItemTextW(hwnd, id, now, 32);
+    if (wcscmp(now, text) != 0) SetDlgItemTextW(hwnd, id, text);
+}
+
 static void ApplySpeedEdit(HWND hwnd) {
     wchar_t buf[32];
     GetDlgItemTextW(hwnd, EDIT_SPEED, buf, 32);
@@ -316,7 +324,7 @@ static void ApplySpeedEdit(HWND hwnd) {
     SetPlaybackSpeed((float)v);
     wchar_t out[32];
     swprintf(out, 32, L"%g", v);
-    SetDlgItemTextW(hwnd, EDIT_SPEED, out);
+    ShowEditText(hwnd, EDIT_SPEED, out);
 }
 
 static void ApplyLoopsEdit(HWND hwnd) {
@@ -328,7 +336,7 @@ static void ApplyLoopsEdit(HWND hwnd) {
     g_app.loopCount = v;
     wchar_t out[16];
     swprintf(out, 16, L"%d", v);
-    SetDlgItemTextW(hwnd, EDIT_LOOPS, out);
+    ShowEditText(hwnd, EDIT_LOOPS, out);
     UpdateStatusDisplay();
 }
 
@@ -342,7 +350,7 @@ static void ApplyIntervalEdit(HWND hwnd) {
     if (g_app.engine && g_app.isClicking) g_app.engine->SetClickInterval(v);
     wchar_t out[16];
     swprintf(out, 16, L"%d", v);
-    SetDlgItemTextW(hwnd, EDIT_INTERVAL, out);
+    ShowEditText(hwnd, EDIT_INTERVAL, out);
     UpdateStatusDisplay();
 }
 
@@ -361,7 +369,7 @@ static int ApplyNumberEdit(HWND hwnd, int id, int lo, int hi) {
     if (v > hi) v = hi;
     wchar_t out[16];
     swprintf(out, 16, L"%ld", v);
-    SetDlgItemTextW(hwnd, id, out);
+    ShowEditText(hwnd, id, out);
     return (int)v;
 }
 
@@ -373,6 +381,34 @@ static void ApplyJitterEdit(HWND hwnd) {
 static void ApplyClickLimitEdit(HWND hwnd) {
     g_app.clickLimit = ApplyNumberEdit(hwnd, EDIT_CLICK_LIMIT, 0, (int)MAX_CLICK_LIMIT);
     PushClickerOptions();
+}
+
+// Take the value typed into one of the number fields; false for any other ID.
+static bool ApplyEdit(HWND hwnd, int id) {
+    if (id == EDIT_SPEED) ApplySpeedEdit(hwnd);
+    else if (id == EDIT_LOOPS) ApplyLoopsEdit(hwnd);
+    else if (id == EDIT_INTERVAL) ApplyIntervalEdit(hwnd);
+    else if (id == EDIT_JITTER) ApplyJitterEdit(hwnd);
+    else if (id == EDIT_CLICK_LIMIT) ApplyClickLimitEdit(hwnd);
+    else return false;
+    SaveSettings();
+    return true;
+}
+
+// Take the focused field's value and leave its caret where it was; the write-back moves it to the start.
+static void ApplyFocusedEdit(HWND hwnd, int id) {
+    DWORD start = 0, end = 0;
+    SendDlgItemMessageW(hwnd, id, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
+    ApplyEdit(hwnd, id);
+    DWORD nowStart = 0, nowEnd = 0;
+    SendDlgItemMessageW(hwnd, id, EM_GETSEL, (WPARAM)&nowStart, (LPARAM)&nowEnd);
+    if (nowStart != start || nowEnd != end) SendDlgItemMessageW(hwnd, id, EM_SETSEL, start, end);
+}
+
+// The ID of the main window control that has the focus, or 0.
+static int FocusedControl(HWND hwnd) {
+    HWND f = GetFocus();
+    return f && IsChild(hwnd, f) ? GetDlgCtrlID(f) : 0;
 }
 
 // What the clicker's choice fields show.
@@ -683,12 +719,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int code = HIWORD(wParam);
 
             if (code == EN_KILLFOCUS) {
-                if (id == EDIT_SPEED) ApplySpeedEdit(hwnd);
-                else if (id == EDIT_LOOPS) ApplyLoopsEdit(hwnd);
-                else if (id == EDIT_INTERVAL) ApplyIntervalEdit(hwnd);
-                else if (id == EDIT_JITTER) ApplyJitterEdit(hwnd);
-                else if (id == EDIT_CLICK_LIMIT) ApplyClickLimitEdit(hwnd);
-                SaveSettings();
+                ApplyEdit(hwnd, id);
                 InvalidateRect(hwnd, NULL, FALSE);   // clear focus ring
                 break;
             }
@@ -822,10 +853,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
 
         case WM_HOTKEY:
-            if (wParam == HOTKEY_RECORD) ToggleRecording(hwnd);
-            else if (wParam == HOTKEY_PLAYBACK) TogglePlayback(hwnd);
-            else if (wParam == HOTKEY_CLICKER) ToggleAutoClicker();
-            else if (wParam == HOTKEY_STOP) StopAll(hwnd);
+            RunHotkey(FocusedControl(hwnd), [hwnd](int id) { ApplyFocusedEdit(hwnd, id); }, [hwnd, wParam] {
+                if (wParam == HOTKEY_RECORD) ToggleRecording(hwnd);
+                else if (wParam == HOTKEY_PLAYBACK) TogglePlayback(hwnd);
+                else if (wParam == HOTKEY_CLICKER) ToggleAutoClicker();
+                else if (wParam == HOTKEY_STOP) StopAll(hwnd);
+            });
             break;
 
         case WM_DROPFILES: {
