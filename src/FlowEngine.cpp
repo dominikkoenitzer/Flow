@@ -19,6 +19,25 @@ FlowEngine* FlowEngine::instance = nullptr;
 
 // ---- HighResTimer ----
 
+namespace {
+
+// A high-resolution waitable timer ends a short sleep on time without raising the timer rate for the whole system; Windows before 10 1803 has none and falls back to Sleep, which ends on the system tick.
+void SleepMicroseconds(LONGLONG microseconds) {
+    if (microseconds <= 0) return;
+    HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    if (timer) {
+        LARGE_INTEGER due;
+        due.QuadPart = -microseconds * 10;  // relative, in 100 ns units
+        const bool waited = SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)
+                            && WaitForSingleObject(timer, INFINITE) == WAIT_OBJECT_0;
+        CloseHandle(timer);
+        if (waited) return;
+    }
+    Sleep(static_cast<DWORD>(microseconds / 1000));
+}
+
+}  // namespace
+
 HighResTimer::HighResTimer() {
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&startTime);
@@ -68,14 +87,13 @@ void HighResTimer::PreciseDelayMs(DWORD milliseconds, const std::atomic<bool>* c
     // The sleep is sliced so a caller that passes a cancel flag can stop during
     // a long pause instead of waiting the whole gap out; the busy-wait still
     // corrects against the absolute target, so timing is unchanged.
-    if (milliseconds > 2) {
-        DWORD remaining = milliseconds - 2;
-        while (remaining > 0) {
-            if (cancel && cancel->load()) return;
-            const DWORD slice = remaining > 50 ? 50 : remaining;
-            Sleep(slice);
-            remaining -= slice;
-        }
+    for (;;) {
+        if (cancel && cancel->load()) return;
+        QueryPerformanceCounter(&now);
+        // Each slice is measured against the target, so time a slice runs over is not carried into the next.
+        const LONGLONG remainingUs = static_cast<LONGLONG>(TicksToUs(now.QuadPart, target, freq.QuadPart));
+        if (remainingUs <= 2000) break;
+        SleepMicroseconds(std::min<LONGLONG>(50000, remainingUs - 2000));
     }
     do {
         if (cancel && cancel->load()) return;
@@ -91,8 +109,7 @@ void HighResTimer::WaitUntilMicroseconds(LONGLONG targetMicroseconds, const std:
         const LONGLONG remaining = targetMicroseconds - GetElapsedMicroseconds();
         if (remaining <= 0) return;
         if (remaining > 3000) {
-            const LONGLONG sleepMs = std::min<LONGLONG>(50, remaining / 1000 - 2);
-            Sleep(static_cast<DWORD>(sleepMs));
+            SleepMicroseconds(std::min<LONGLONG>(50000, remaining - 2000));
         }
     }
 }
