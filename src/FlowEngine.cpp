@@ -985,13 +985,47 @@ bool FlowEngine::SaveMacro(const std::wstring& filename) {
 }
 
 bool WriteFileWhole(const std::wstring& path, const FileWriter& write, std::ios::openmode mode) {
+    // Write a new file beside the old one and swap it in once all of it is on
+    // the disk, so a write that fails part way leaves the old file as it was.
+    // CREATE_NEW takes a name no other file has, so nothing else is overwritten.
+    std::wstring temp;
+    for (int i = 0; temp.empty(); ++i) {
+        if (i == 100) return false;
+        std::wstring name = path + L"." + std::to_wstring(GetCurrentProcessId()) + L"." +
+                            std::to_wstring(i) + L".tmp";
+        HANDLE reserved = CreateFileW(name.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                      FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (reserved != INVALID_HANDLE_VALUE) {
+            CloseHandle(reserved);
+            temp = name;
+        } else if (GetLastError() != ERROR_FILE_EXISTS) {
+            return false;
+        }
+    }
+
     // Open by the wide path. A narrow path is read in the ANSI code page, so a
     // name outside it would be garbled and the file saved under the wrong name.
-    std::ofstream file(std::filesystem::path(path), mode);
-    if (!file.is_open()) return false;
-    write(file);
-    file.close();
-    return !file.fail();  // a full disk fails the write or the flush on close
+    std::ofstream file(std::filesystem::path(temp), mode);
+    bool ok = file.is_open();
+    if (ok) {
+        write(file);
+        file.close();
+        ok = !file.fail();  // a full disk fails the write or the flush on close
+    }
+
+    // NTFS journals the rename but not the data, so without this a power cut
+    // right after the swap could leave an empty file in place of both.
+    if (ok) {
+        HANDLE written = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
+                                     FILE_ATTRIBUTE_NORMAL, nullptr);
+        ok = written != INVALID_HANDLE_VALUE && FlushFileBuffers(written);
+        if (written != INVALID_HANDLE_VALUE) CloseHandle(written);
+    }
+
+    if (ok) ok = MoveFileExW(temp.c_str(), path.c_str(),
+                             MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    if (!ok) DeleteFileW(temp.c_str());
+    return ok;
 }
 
 bool FlowEngine::LoadMacro(const std::wstring& filename) {

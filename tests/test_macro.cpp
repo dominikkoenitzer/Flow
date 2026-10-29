@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -73,15 +74,13 @@ void recordSample(FlowEngine& engine) {
     pushMouse(engine, WM_RBUTTONUP, -50, 900);
 }
 
-std::string narrow(const std::wstring& w) { return std::string(w.begin(), w.end()); }
-
 std::vector<char> readAll(const std::wstring& path) {
-    std::ifstream f(narrow(path), std::ios::binary);
+    std::ifstream f(std::filesystem::path(path), std::ios::binary);
     return std::vector<char>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
 
 void writeBytes(const std::wstring& path, const std::vector<char>& bytes) {
-    std::ofstream f(narrow(path), std::ios::binary);
+    std::ofstream f(std::filesystem::path(path), std::ios::binary);
     if (!bytes.empty()) f.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
 }
 
@@ -361,6 +360,60 @@ TEST_CASE("An empty macro round trips") {
     pushMouse(loader, WM_LBUTTONDOWN, 1, 1);
     REQUIRE(loader.LoadMacro(file.path));
     CHECK(loader.GetEventCount() == 0);
+}
+
+/** Files in the temp folder whose names start with the scratch path's name. */
+size_t filesBeside(const std::wstring& path) {
+    const std::filesystem::path p(path);
+    const std::wstring stem = p.filename().wstring();
+    size_t count = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(p.parent_path()))
+        if (entry.path().filename().wstring().rfind(stem, 0) == 0) ++count;
+    return count;
+}
+
+TEST_CASE("A write that fails part way leaves the old file as it was") {
+    ScratchFile file(L"failed_write");
+    const std::vector<char> old = {'o', 'l', 'd', ' ', 'm', 'a', 'c', 'r', 'o'};
+    writeBytes(file.path, old);
+
+    const bool saved = flow::WriteFileWhole(file.path, [](std::ostream& out) {
+        out.write("new", 3);
+        out.setstate(std::ios::badbit);  // as a full disk or a removed drive does
+    });
+
+    CHECK_FALSE(saved);
+    CHECK(readAll(file.path) == old);
+    CHECK(filesBeside(file.path) == 1);
+}
+
+TEST_CASE("Saving over a macro replaces it whole and leaves nothing beside it") {
+    ScratchFile file(L"overwrite");
+    writeBytes(file.path, std::vector<char>(4096, 'x'));
+
+    FlowEngine recorder;
+    recordSample(recorder);
+    REQUIRE(recorder.SaveMacro(file.path));
+
+    FlowEngine loader;
+    REQUIRE(loader.LoadMacro(file.path));
+    CHECK(loader.GetEventCount() == 7);
+    CHECK(readAll(file.path).size() == 4 + 8 + 4 + 8 + 7 * flow::MACRO_EVENT_SIZE_V2);
+    CHECK(filesBeside(file.path) == 1);
+}
+
+TEST_CASE("Saving over a macro whose name is outside the ANSI code page") {
+    ScratchFile file(L"\u0416\u03A9\u4E2D");
+    writeBytes(file.path, {'o', 'l', 'd'});
+    REQUIRE(readAll(file.path).size() == 3);
+
+    FlowEngine recorder;
+    recordSample(recorder);
+    REQUIRE(recorder.SaveMacro(file.path));
+
+    FlowEngine loader;
+    REQUIRE(loader.LoadMacro(file.path));
+    CHECK(loader.GetEventCount() == 7);
 }
 
 TEST_CASE("LoadMacro rejects a file that is not a macro") {
