@@ -979,11 +979,17 @@ bool FlowEngine::SaveMacro(const std::wstring& filename) {
         }
     }
 
+    return WriteFileWhole(filename, [&](std::ostream& out) {
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    });
+}
+
+bool WriteFileWhole(const std::wstring& path, const FileWriter& write, std::ios::openmode mode) {
     // Open by the wide path. A narrow path is read in the ANSI code page, so a
     // name outside it would be garbled and the file saved under the wrong name.
-    std::ofstream file(std::filesystem::path(filename), std::ios::binary);
+    std::ofstream file(std::filesystem::path(path), mode);
     if (!file.is_open()) return false;
-    file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    write(file);
     file.close();
     return !file.fail();  // a full disk fails the write or the flush on close
 }
