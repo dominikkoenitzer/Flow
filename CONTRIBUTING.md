@@ -61,7 +61,7 @@ FLOW needs **Administrator privileges** for its global low-level input hooks. La
 | `include/ui/Placement.h` | Keeps a restored window inside its monitor's work area. |
 | `src/ui/Draw.cpp` / `include/ui/Draw.h` | Anti-aliased GDI+ primitives and the vector glyphs. |
 | `src/ui/Buttons.cpp` / `include/ui/Buttons.h` | The owner-draw buttons, toggles and key fields. |
-| `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization and About dialogs. |
+| `src/ui/Dialogs.cpp` / `include/ui/Dialogs.h` | The hotkey-customization, Trim & Timing and About dialogs. |
 | `src/FlowEngine.cpp` / `include/FlowEngine.h` | UI-agnostic engine (`flow` namespace). |
 | `resource.rc` / `FLOW.manifest` | Icon + manifest, embedded via `windres`. |
 | `scripts/` | `build.ps1`, `test.ps1`, `package.ps1`, `make-icon.ps1` (redraws `Flow.ico` and `Flow.png`). |
