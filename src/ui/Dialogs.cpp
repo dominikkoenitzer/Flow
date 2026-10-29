@@ -313,13 +313,7 @@ LRESULT CALLBACK HotkeyEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     (void)dwRefData;
     if (msg == WM_KEYDOWN) {
         UINT vk = (UINT)wParam;
-        
-        // Allow F1-F12, A-Z, 0-9
-        bool validKey = (vk >= VK_F1 && vk <= VK_F12) || 
-                        (vk >= 'A' && vk <= 'Z') || 
-                        (vk >= '0' && vk <= '9');
-        
-        if (validKey) {
+        if (IsHotkeyKey(vk)) {
             if (hwnd == g_hHotkeyRecordEdit)        g_tempHotkeyRecord = vk;
             else if (hwnd == g_hHotkeyPlaybackEdit) g_tempHotkeyPlayback = vk;
             else if (hwnd == g_hHotkeyClickerEdit)  g_tempHotkeyClicker = vk;
