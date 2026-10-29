@@ -5,6 +5,7 @@
 #include "Settings.h"
 
 #include "AppState.h"
+#include "Hotkeys.h"
 
 #include <windows.h>
 #include <cstdlib>
@@ -96,6 +97,11 @@ void LoadSettings() {
     std::ifstream f(GetSettingsPath());
     if (!f.is_open()) return;
 
+    // The hotkeys are settled together once the file is read, against the ones in place before it.
+    const UINT defaults[4] = {g_app.hotkeyRecord, g_app.hotkeyPlayback,
+                              g_app.hotkeyClicker, g_app.hotkeyStop};
+    UINT hotkeys[4] = {defaults[0], defaults[1], defaults[2], defaults[3]};
+
     std::string line;
     while (std::getline(f, line)) {
         // Strip a trailing carriage return (in case of CRLF files)
@@ -144,17 +150,13 @@ void LoadSettings() {
             double v = atof(val.c_str());
             if (v >= 0.0 && v <= 1000.0) g_app.humanizationStdDev = v;
         } else if (key == "hotkeyRecord") {
-            UINT v = (UINT)atoi(val.c_str());
-            if (v != 0) g_app.hotkeyRecord = v;
+            hotkeys[0] = (UINT)atoi(val.c_str());
         } else if (key == "hotkeyPlayback") {
-            UINT v = (UINT)atoi(val.c_str());
-            if (v != 0) g_app.hotkeyPlayback = v;
+            hotkeys[1] = (UINT)atoi(val.c_str());
         } else if (key == "hotkeyClicker") {
-            UINT v = (UINT)atoi(val.c_str());
-            if (v != 0) g_app.hotkeyClicker = v;
+            hotkeys[2] = (UINT)atoi(val.c_str());
         } else if (key == "hotkeyStop") {
-            UINT v = (UINT)atoi(val.c_str());
-            if (v != 0) g_app.hotkeyStop = v;
+            hotkeys[3] = (UINT)atoi(val.c_str());
         } else if (key == "reopenLastMacro") {
             g_app.reopenLastMacro = (atoi(val.c_str()) != 0);
         } else if (key == "lastMacro") {
@@ -165,6 +167,11 @@ void LoadSettings() {
             g_app.winY = atoi(val.c_str()); g_app.hasWinPos = true;
         }
     }
+    SettleHotkeys(hotkeys, defaults);
+    g_app.hotkeyRecord = hotkeys[0];
+    g_app.hotkeyPlayback = hotkeys[1];
+    g_app.hotkeyClicker = hotkeys[2];
+    g_app.hotkeyStop = hotkeys[3];
     g_savedText = SettingsText();
 }
 
