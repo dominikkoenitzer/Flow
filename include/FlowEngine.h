@@ -176,6 +176,12 @@ public:
     HighResTimer();
 
     /**
+     * @brief Start the clock at a given counter reading instead of now
+     * @param startTicks A QueryPerformanceCounter reading
+     */
+    explicit HighResTimer(LONGLONG startTicks);
+
+    /**
      * @brief Get elapsed time since timer creation or last reset
      * @return Elapsed microseconds
      */

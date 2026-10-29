@@ -157,6 +157,19 @@ TEST_CASE("The timer keeps counting past the point where ticks * 1000000 overflo
     CHECK(elapsed < (seconds + 1) * 1000000);
 }
 
+TEST_CASE("A timer started that long ago reads the right elapsed time now") {
+    // GetElapsedMicroseconds is what playback waits on, so it is checked on its own.
+    LARGE_INTEGER freq, now;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&now);
+
+    const LONGLONG seconds = LLONG_MAX / 1000000 / freq.QuadPart + 1;
+    HighResTimer timer(now.QuadPart - seconds * freq.QuadPart);
+    const LONGLONG elapsed = timer.GetElapsedMicroseconds();
+    CHECK(elapsed >= seconds * 1000000);
+    CHECK(elapsed < (seconds + 1) * 1000000);
+}
+
 TEST_CASE("A tick conversion that cannot be trusted returns zero") {
     CHECK(flow::TicksToUs(100, 50, 10000000) == 0);    // readings run backwards
     CHECK(flow::TicksToUs(0, 10000, 0) == 0);          // no frequency
