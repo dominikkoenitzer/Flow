@@ -38,7 +38,7 @@ $src = (Get-ChildItem src -Recurse -Filter *.cpp).FullName
 g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -Werror -mwindows -I include -o build/FLOW.exe $src build/resource.o -luser32 -lgdi32 -lcomctl32 -lgdiplus -lshell32 -lole32 -luuid -static -static-libgcc -static-libstdc++
 ```
 
-In VS Code, **Run Build Task** (`Ctrl+Shift+B`) builds with `-Wall -Wextra`, but without `-Werror` and `-DNDEBUG`.
+In VS Code, run `.\scripts\build.ps1` from the terminal.
 
 ### `-static` is mandatory
 
