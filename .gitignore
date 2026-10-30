@@ -35,7 +35,6 @@ x86/
 
 # Visual Studio Code
 .vscode/*
-!.vscode/tasks.json
 !.vscode/settings.json
 !.vscode/launch.json
 .vscode/c_cpp_properties.json
