@@ -2,7 +2,7 @@
 
 FLOW (Flexible Low-latency Operations Workflow) is a macro recorder and auto-clicker for Windows.
 
-[![CI](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml/badge.svg)](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml)
+[![CI](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml)
 
 <p align="center">
   <img src="docs/screenshot.png" alt="The FLOW main window: macro recording, playback controls, and the auto-clicker." width="420">
