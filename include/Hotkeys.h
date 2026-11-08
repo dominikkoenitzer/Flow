@@ -45,13 +45,16 @@ inline UINT HotkeyFieldKey(UINT msg, WPARAM wParam, LPARAM lParam) {
 /**
  * Register every binding through `reg`, which the app points at RegisterHotKey,
  * and return the index of the first one refused, or -1 when none was.
- * A refused key does not stop the rest from being registered.
+ * A refused key does not stop the rest from being registered. Each one gets
+ * MOD_NOREPEAT, so holding a key sends one WM_HOTKEY instead of one per repeat.
  */
 template <typename Register>
 int RegisterBindings(const std::array<HotkeyBinding, 4>& bindings, Register reg) {
     int refused = -1;
     for (int i = 0; i < (int)bindings.size(); ++i) {
-        if (!reg(bindings[i]) && refused < 0) refused = i;
+        HotkeyBinding binding = bindings[i];
+        binding.modifiers |= MOD_NOREPEAT;
+        if (!reg(binding) && refused < 0) refused = i;
     }
     return refused;
 }

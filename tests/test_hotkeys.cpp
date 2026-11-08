@@ -96,8 +96,21 @@ TEST_CASE("Each binding is registered with its own id and modifiers") {
     CHECK(refused == -1);
     REQUIRE(seen.size() == 4);
     CHECK(seen[1].id == 302);
-    CHECK(seen[1].modifiers == MOD_CONTROL);
-    CHECK(seen[0].modifiers == 0);
+    CHECK((seen[1].modifiers & ~MOD_NOREPEAT) == MOD_CONTROL);
+    CHECK((seen[0].modifiers & ~MOD_NOREPEAT) == 0);
+}
+
+TEST_CASE("Every binding is registered without key repeat, so a held key fires once") {
+    std::vector<HotkeyBinding> seen;
+    RegisterBindings(kBindings, [&](const HotkeyBinding& b) {
+        seen.push_back(b);
+        return true;
+    });
+    REQUIRE(seen.size() == 4);
+    for (const HotkeyBinding& b : seen) {
+        CAPTURE(b.id);
+        CHECK((b.modifiers & MOD_NOREPEAT) != 0);
+    }
 }
 
 TEST_CASE("The dialog's keys are F1 to F12, A to Z and 0 to 9") {
