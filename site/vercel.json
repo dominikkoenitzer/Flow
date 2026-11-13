@@ -15,5 +15,16 @@
       "destination": "https://github.com/dominikkoenitzer/Flow/releases/download/flow/SHA256SUMS.txt",
       "permanent": false
     }
+  ],
+  "headers": [
+    {
+      "source": "/diag(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
+    }
   ]
 }
