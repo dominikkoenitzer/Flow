@@ -102,7 +102,7 @@ jobs:
           # the workflow_dispatch path failed before it could move the tag.
           target_commitish: ${{ github.sha }}
           draft: false
-          generate_release_notes: true
+          generate_release_notes: false
           files: |
             dist/FLOW-win64.zip
             dist/FLOW-win64/FLOW.exe
