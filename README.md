@@ -1,5 +1,7 @@
 # FLOW
 
+You may view this code, but it is not open source: reusing, changing or redistributing it is not allowed, and to use part of FLOW, open an issue to ask.
+
 FLOW (Flexible Low-latency Operations Workflow) is a macro recorder and auto-clicker for Windows.
 
 [![CI](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dominikkoenitzer/Flow/actions/workflows/ci.yml)
